@@ -49,9 +49,11 @@ WORKDIR /app
 
 COPY --from=vendor-build /usr/bin/composer /usr/bin/composer
 COPY --from=vendor-build /app/vendor ./vendor
-COPY --from=node-build /build/public/build ./public/build
 
 COPY . .
+
+# Keep the production Vite output from being overwritten by repository files.
+COPY --from=node-build /build/public/build ./public/build
 
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
