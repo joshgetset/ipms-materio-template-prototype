@@ -1,7 +1,7 @@
 # =========================================================
 # STAGE 1 — Node: build the Materio dashboard assets (Vite)
 # =========================================================
-FROM node:20-alpine AS node-build
+FROM node:20-slim AS node-build
 
 WORKDIR /build
 
@@ -21,11 +21,13 @@ RUN npm run build
 # =========================================================
 FROM php:8.2-cli AS vendor-build
 
-# Composer binary + the extensions the lock file needs
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
 RUN apt-get update && apt-get install -y \
-        libpng-dev libzip-dev unzip \
-    && docker-php-ext-install pdo_mysql mbstring zip gd \
+        libpng-dev libjpeg-dev libfreetype6-dev \
+        libonig-dev libzip-dev zlib1g-dev unzip \
+    && docker-php-ext-install \
+        pdo_mysql mbstring zip gd exif \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -54,9 +56,6 @@ COPY --from=vendor-build /usr/bin/composer /usr/bin/composer
 COPY --from=node-build /build/public/build ./public/build
 
 COPY . .
-
-# Keep the built assets (don't let the plain COPY wipe them)
-RUN ls -la public/build || true
 
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
