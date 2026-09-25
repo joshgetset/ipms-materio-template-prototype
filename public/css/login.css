@@ -1,0 +1,1069 @@
+:root {
+  --blue-dark: #102873;
+  --blue-light: #1d3da3;
+  --blue-soft: #eef3ff;
+  --text-dark: #172033;
+  --text-medium: #526078;
+  --text-light: #7c8799;
+  --border: #dce2ed;
+  --input-border: #b7c1d4;
+  --background: #f6f8fc;
+  --space-xs: 8px;
+  --space-sm: 14px;
+  --space-md: 20px;
+  --space-lg: 28px;
+  --space-xl: 40px;
+  --space-2xl: 56px;
+  --panel-ease: cubic-bezier(0.65, 0, 0.35, 1);
+  --panel-duration: 0.85s;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  color: var(--text-dark);
+  background:
+    radial-gradient(circle at 15% 20%, rgba(29, 61, 163, 0.05), transparent 30%),
+    radial-gradient(circle at 85% 80%, rgba(16, 40, 115, 0.04), transparent 30%), var(--background);
+  -webkit-font-smoothing: antialiased;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 45px 30px;
+}
+
+.login-container {
+  position: relative;
+  width: min(1160px, 100%);
+  min-height: 620px;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid rgba(220, 226, 237, 0.95);
+  border-radius: 26px;
+  box-shadow: 0 34px 100px rgba(8, 20, 60, 0.32);
+}
+
+/* Blue panel — slsu_main.png as base, LEFT side of the photo,
+   with the blue tint as a self-fading vertical gradient: strong
+   at top, translucent at bottom. */
+.login-animation {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 46.5%;
+  height: 100%;
+  z-index: 3;
+  overflow: hidden;
+  background-color: #123087;
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(13, 32, 92, 0.94) 0%,
+      rgba(18, 41, 115, 0.86) 45%,
+      rgba(24, 53, 143, 0.55) 78%,
+      rgba(24, 53, 143, 0.3) 100%
+    ),
+    url('../images/hero-carousel/slsu_main.png');
+  background-repeat: no-repeat, no-repeat;
+  background-position:
+    center,
+    left center;
+  background-size: auto, cover;
+  transform: translateX(0);
+  will-change: transform;
+  transition: transform var(--panel-duration) var(--panel-ease);
+}
+
+.login-animation::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('../images/backdrop/tribal_pattern.png') repeat;
+  background-size: 620px auto;
+  opacity: 0.1;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 45%, rgba(0, 0, 0, 0.4) 75%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 45%, rgba(0, 0, 0, 0.4) 75%, transparent 100%);
+  pointer-events: none;
+}
+
+/* Bottom vignette — darkens the very bottom so the photo
+   transition and caption stay clean */
+.login-animation::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 62%, rgba(9, 18, 38, 0.4) 100%);
+  pointer-events: none;
+}
+
+.signup-mode .login-animation,
+.login-container:has(.signup-card.is-active) .login-animation {
+  transform: translateX(115.05%);
+}
+
+.animation-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.13;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+  background-size: 55px 55px;
+  mask-image: radial-gradient(circle at center, black, transparent 75%);
+}
+
+.animation-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 320px;
+  height: 320px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.1), transparent 70%);
+  pointer-events: none;
+  animation: pulse 4s ease-in-out infinite;
+}
+
+/* Orb — centers the seal; no disc, the seal stands alone on
+   the panel with its drop-shadow providing the lift */
+.brand-orb {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 460px;
+  height: 460px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* SLSU seal — static */
+.auth-image {
+  width: 100%;
+  max-width: 72vw;
+  max-height: 460px;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.16));
+}
+
+.auth-image-logo {
+  max-width: 300px;
+  max-height: 100%;
+}
+
+.animation-caption {
+  position: absolute;
+  left: 42px;
+  bottom: 36px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.43);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+}
+
+.caption-line {
+  width: 30px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Form panel — card docked to the TOP so the banner sits at
+   the top edge; fields centered horizontally */
+.login-form-panel {
+  position: relative;
+  width: 100%;
+  min-height: 620px;
+  display: grid;
+  align-items: start;
+  justify-items: center;
+  padding: 48px 40px var(--space-2xl);
+  padding-left: calc(46.5% + 40px);
+  background: #ffffff;
+  transition: padding var(--panel-duration) var(--panel-ease);
+}
+
+.signup-mode .login-form-panel,
+.login-container:has(.signup-card.is-active) .login-form-panel {
+  padding-left: 40px;
+  padding-right: calc(53.5% + 40px);
+}
+
+/* Login mode — stretch the card to the panel height: all slack
+   distributes evenly from the kicker down (space-between), the
+   banner stays pinned at the top */
+.login-form-panel:has(.auth-card[data-auth-card='login'].is-active) {
+  align-items: stretch;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 460px;
+}
+
+/* Cards are flex columns — enables the space-between
+   distribution in login mode */
+.auth-card {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(56px);
+  transition:
+    opacity 0.4s ease,
+    transform 0.55s cubic-bezier(0.4, 0, 1, 1),
+    visibility 0s linear 0.55s;
+}
+
+/* Every card child spans the full card width, so centered
+   content (banner, bottom link) shares one centerline with the
+   fields in both modes; the kicker overrides to left-align */
+.auth-card > * {
+  width: 100%;
+}
+
+.auth-card.is-active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0);
+  transition:
+    opacity 0.55s ease 0.26s,
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.2s,
+    visibility 0s linear 0s;
+}
+
+.auth-card.signup-card:not(.is-active) {
+  transform: translateX(-56px);
+}
+
+.login-form-panel:has(.auth-card[data-auth-card='login'].is-active) .auth-card[data-auth-card='login'] {
+  justify-content: space-between;
+}
+
+.signup-card {
+  max-width: 430px;
+}
+.signup-card .login-form {
+  margin-top: 16px;
+}
+.signup-card .floating-field {
+  margin-bottom: 12px;
+}
+.signup-card .floating-field input {
+  height: 52px;
+}
+.signup-card .login-button {
+  margin-top: 8px;
+}
+
+/* Signup card — restore minimum spacing at the bottom
+   (this card defines the panel height, so there is no slack
+   to distribute; explicit margins are what create the gaps) */
+.signup-card .login-divider {
+  margin: 40px 0 24px;
+}
+
+.signup-card .social-login {
+  margin-bottom: 32px;
+}
+
+/* Guard: neutralize any .fade-up defined in auth_animation.css
+   so it never fights the cardChildIn stagger below */
+.auth-card .fade-up {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+
+/* Content stagger — replays whenever .is-active is re-added */
+.auth-card.is-active .login-header,
+.auth-card.is-active .login-kicker,
+.auth-card.is-active .login-form,
+.auth-card.is-active .login-divider,
+.auth-card.is-active .social-login,
+.auth-card.is-active .login-bottom {
+  animation: cardChildIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.auth-card.is-active .login-header {
+  animation-delay: 0.38s;
+}
+.auth-card.is-active .login-kicker {
+  animation-delay: 0.42s;
+}
+.auth-card.is-active .login-form {
+  animation-delay: 0.46s;
+}
+.auth-card.is-active .login-divider {
+  animation-delay: 0.56s;
+}
+.auth-card.is-active .social-login {
+  animation-delay: 0.62s;
+}
+.auth-card.is-active .login-bottom {
+  animation-delay: 0.68s;
+}
+
+@keyframes cardChildIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Header — banner only, pinned at the top of the card, centered */
+.login-header {
+  margin-top: 0;
+}
+
+.login-banner {
+  display: block;
+  max-width: 280px;
+  width: calc(100% - 20px);
+  height: auto;
+  margin: 0 auto;
+}
+
+/* Kicker — LEFT-aligned in both modes, desktop and mobile */
+.login-kicker {
+  display: block;
+  color: var(--text-dark);
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-align: left;
+}
+
+.login-form {
+  margin-top: var(--space-md);
+}
+
+/* Floating label fields */
+.floating-field {
+  position: relative;
+  margin-bottom: var(--space-lg);
+}
+
+.floating-field input {
+  width: 100%;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  color: var(--text-dark);
+  background: #ffffff;
+  border: 1.5px solid var(--input-border);
+  border-radius: 11px;
+  outline: none;
+  font-family: inherit;
+  font-size: 15px;
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.floating-field label {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-light);
+  font-size: 14px;
+  font-weight: 500;
+  pointer-events: none;
+  transition:
+    top 0.22s ease,
+    transform 0.22s ease,
+    font-size 0.22s ease,
+    color 0.22s ease,
+    background 0.22s ease,
+    padding 0.22s ease;
+}
+
+.floating-field input:focus {
+  border-color: var(--blue-light);
+  box-shadow: 0 0 0 4px rgba(29, 61, 163, 0.08);
+}
+
+.floating-field input:focus + label,
+.floating-field input:not(:placeholder-shown) + label {
+  top: 0;
+  transform: translateY(-50%);
+  padding: 0 7px;
+  color: var(--blue-light);
+  background: #ffffff;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.password-field {
+  margin-bottom: 0;
+}
+
+.password-field input {
+  padding-right: 46px;
+}
+
+.password-strength {
+  position: relative;
+  z-index: 1;
+  margin: 10px 0 16px;
+  padding: 0 2px;
+  display: block;
+}
+
+.password-strength[hidden] {
+  display: none;
+}
+
+.password-strength-bar {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(29, 61, 163, 0.12);
+}
+
+.password-strength-fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #ef4444;
+  transition:
+    width 0.2s ease,
+    background 0.2s ease;
+}
+
+.password-strength[data-strength='weak'] .password-strength-fill {
+  width: 33%;
+  background: #ef4444;
+}
+
+.password-strength[data-strength='medium'] .password-strength-fill {
+  width: 66%;
+  background: #f59e0b;
+}
+
+.password-strength[data-strength='strong'] .password-strength-fill {
+  width: 100%;
+  background: #22c55e;
+}
+
+.password-strength-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  color: var(--text-light);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.password-strength-status {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.password-strength[data-strength='weak'] .password-strength-status {
+  color: #ef4444;
+}
+
+.password-strength[data-strength='medium'] .password-strength-status {
+  color: #f59e0b;
+}
+
+.password-strength[data-strength='strong'] .password-strength-status {
+  color: #22c55e;
+}
+
+.password-confirm-feedback {
+  position: relative;
+  z-index: 1;
+  margin-top: 10px;
+  min-height: 18px;
+  color: var(--text-light);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.password-confirm-feedback.is-mismatch {
+  color: #d92d20;
+}
+
+.password-confirm-feedback.is-match {
+  color: #0f9f6e;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-light);
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
+}
+
+.password-toggle:hover {
+  color: var(--blue-light);
+  background: var(--blue-soft);
+}
+
+.password-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+.password-toggle .icon-eye-off {
+  display: none;
+}
+.password-toggle.is-visible .icon-eye {
+  display: none;
+}
+.password-toggle.is-visible .icon-eye-off {
+  display: block;
+}
+
+.login-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-xs);
+  margin-bottom: var(--space-lg);
+}
+
+.remember-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--text-medium);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.remember-option input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--blue-dark);
+}
+
+.forgot-link {
+  color: var(--blue-light);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.forgot-link:hover {
+  color: var(--blue-dark);
+}
+
+.login-button {
+  width: 100%;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px 0 24px;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--blue-dark), var(--blue-light));
+  border: 0;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 15.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(16, 40, 115, 0.19);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.login-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(16, 40, 115, 0.25);
+}
+
+.login-arrow {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  font-size: 16px;
+  transition: transform 0.2s ease;
+}
+
+.login-button:hover .login-arrow {
+  transform: translateX(3px);
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: var(--space-md) 0;
+  color: #a0a8b7;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e5e9f0;
+}
+
+.social-login {
+  margin-bottom: 0;
+}
+
+.google-button {
+  width: 100%;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #ffffff;
+  border: 1.5px solid var(--input-border);
+  border-radius: 12px;
+  color: var(--text-dark);
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(16, 40, 115, 0.06);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.google-button svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.google-button:hover {
+  border-color: var(--blue-light);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(16, 40, 115, 0.12);
+}
+
+.login-bottom {
+  color: var(--text-medium);
+  text-align: center;
+  font-size: 15.5px;
+  line-height: 1.65;
+}
+
+.login-bottom a {
+  color: var(--blue-light);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.login-bottom a:hover {
+  color: var(--blue-dark);
+}
+
+/* Back button — top LEFT edge of the container, above both
+   panels, out of the content flow */
+.back-home {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 5;
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1.5px solid var(--input-border);
+  border-radius: 50%;
+  color: var(--blue-dark);
+  text-decoration: none;
+  box-shadow: 0 12px 28px rgba(16, 40, 115, 0.18);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.back-home svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.2s ease;
+}
+
+.back-home:hover {
+  border-color: var(--blue-light);
+  color: var(--blue-light);
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px rgba(16, 40, 115, 0.24);
+}
+
+.back-home:hover svg {
+  transform: translateX(-2px);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(9, 18, 38, 0.48);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.loading-modal.is-visible {
+  display: flex;
+}
+
+.loading-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 32px 36px;
+  background: #ffffff;
+  border-radius: 18px;
+  border: 1px solid rgba(220, 226, 237, 0.95);
+  box-shadow: 0 28px 80px rgba(8, 20, 60, 0.28);
+}
+
+.loading-spinner {
+    width: 42px;
+    height: 42px;
+    border: 4px solid rgba(29, 61, 163, 0.15);
+    border-top-color: var(--blue-light);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+}
+
+.loading-dialog p {
+  color: var(--text-dark);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.auth-global-message {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2100;
+  min-width: min(90vw, 420px);
+  max-width: min(90vw, 560px);
+  padding: 14px 18px;
+  border-radius: 14px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: center;
+  box-shadow: 0 20px 42px rgba(16, 40, 115, 0.22);
+  opacity: 1;
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+
+.auth-global-message.is-closing {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-10px);
+}
+
+.auth-global-message-success {
+  background: linear-gradient(135deg, #0d8a4c, #149d5d);
+}
+
+.auth-global-message-error {
+  background: linear-gradient(135deg, #b72138, #d63247);
+}
+
+.toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translate(-50%, -12px);
+  z-index: 2000;
+  min-width: 290px;
+  max-width: 420px;
+  width: min(90vw, 420px);
+  color: #ffffff;
+  background: rgba(9, 18, 38, 0.96);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 18px 40px rgba(16, 40, 115, 0.22);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+
+.toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.toast-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.toast.success {
+  background: linear-gradient(135deg, #0d8a4c, #149d5d);
+}
+.toast.error {
+  background: linear-gradient(135deg, #b72138, #d63247);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-up,
+  .brand-orb,
+  .auth-image,
+  .animation-glow,
+  .loading-spinner {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .login-animation,
+  .login-form-panel,
+  .auth-card {
+    transition: none;
+  }
+
+  .auth-card.is-active .login-header,
+  .auth-card.is-active .login-kicker,
+  .auth-card.is-active .login-form,
+  .auth-card.is-active .login-divider,
+  .auth-card.is-active .social-login,
+  .auth-card.is-active .login-bottom {
+    animation: none;
+  }
+}
+
+/* Mobile — the blue panel sits at the TOP in both modes
+   (no switching), the card flows naturally below it. Kickers
+   stay LEFT-aligned; everything else is centered with even
+   spacing between elements. */
+@media (max-width: 950px) {
+  .login-page {
+    padding: 30px 20px;
+  }
+  .login-container {
+    max-width: 560px;
+  }
+
+  .login-animation {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+    height: 260px;
+    transform: none;
+  }
+
+  /* Neutralize ALL panel-positioning rules from desktop —
+       regardless of mode */
+  .signup-mode .login-animation,
+  .login-container:has(.signup-card.is-active) .login-animation {
+    transform: none;
+  }
+
+  /* Card distribution rules from desktop don't apply here —
+       the panel is a top banner, the card flows below it, and
+       everything stays CENTERED */
+  .login-form-panel:has(.auth-card[data-auth-card='login'].is-active) {
+    align-items: start;
+    justify-items: center;
+  }
+
+  .login-form-panel:has(.auth-card[data-auth-card='login'].is-active) .auth-card[data-auth-card='login'] {
+    justify-content: flex-start;
+  }
+
+  .login-form-panel:has(.auth-card[data-auth-card='login'].is-active) .login-divider {
+    margin-top: var(--space-md);
+  }
+
+  /* Kicker stays left even on mobile */
+  .login-form-panel:has(.auth-card[data-auth-card='login'].is-active) .login-kicker {
+    text-align: left;
+  }
+
+  .brand-orb {
+    width: 320px;
+    height: 200px;
+  }
+  .animation-glow {
+    width: 240px;
+    height: 240px;
+  }
+  .animation-caption {
+    left: 25px;
+    bottom: 20px;
+  }
+
+  .login-form-panel {
+    min-height: 0;
+    padding: 32px 24px var(--space-xl);
+  }
+
+  .signup-mode .login-form-panel,
+  .login-container:has(.signup-card.is-active) .login-form-panel {
+    padding: 32px 24px var(--space-xl);
+  }
+
+  .login-banner {
+    max-width: 240px;
+  }
+
+  /* Restore breathing room between button, divider, Google
+       button, and switch link — the desktop distribution
+       margins are neutralized here */
+  .login-divider {
+    margin: var(--space-lg) 0;
+  }
+
+  .social-login {
+    margin-bottom: var(--space-lg);
+  }
+}
+
+@media (max-width: 600px) {
+  .login-page {
+    padding: 15px;
+  }
+  .login-container {
+    border-radius: 20px;
+  }
+  .login-animation {
+    height: 200px;
+  }
+  .brand-orb {
+    width: 200px;
+    height: 140px;
+  }
+  .animation-glow {
+    width: 180px;
+    height: 180px;
+  }
+  .animation-caption {
+    display: none;
+  }
+
+  .login-form-panel {
+    padding: 24px 20px var(--space-xl);
+  }
+
+  .signup-mode .login-form-panel,
+  .login-container:has(.signup-card.is-active) .login-form-panel {
+    padding: 24px 20px var(--space-xl);
+  }
+
+  .login-banner {
+    max-width: 210px;
+  }
+  .login-kicker {
+    font-size: 24px;
+    text-align: left;
+  }
+  .floating-field input {
+    height: 62px;
+  }
+
+  .login-divider {
+    margin: var(--space-md) 0;
+  }
+
+  .social-login {
+    margin-bottom: var(--space-md);
+  }
+}

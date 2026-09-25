@@ -26,5 +26,8 @@ yarn-error.log
 !/public/assets/*
 /public/css/*
 !/public/css/home/
+!/public/css/login.css
+!/public/css/auth_animation.css
 /public/js/*
 !/public/js/home/
+!/public/js/login.js
