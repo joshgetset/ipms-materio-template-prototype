@@ -9,6 +9,7 @@ chmod -R 775 storage bootstrap/cache
 mkdir -p database
 touch database/database.sqlite
 
+php artisan optimize:clear
 php artisan migrate --force
 php artisan storage:link || true
 
