@@ -24,5 +24,7 @@ yarn-error.log
 
 !/public/assets
 !/public/assets/*
-/public/css
-/public/js
+/public/css/*
+!/public/css/home/
+/public/js/*
+!/public/js/home/

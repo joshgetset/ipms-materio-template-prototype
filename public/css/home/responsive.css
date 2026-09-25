@@ -1,0 +1,59 @@
+/* Home responsive — container, nav text tweaks, patent modals.
+   Hero breakpoints live in hero_carousel.css; section grids in
+   home_sections.css. Load BEFORE navbar.css. */
+
+@media (max-width: 768px) {
+    .container { width: min(100% - 32px, var(--container)); }
+    .nav-login { font-size: 12px; }
+
+    .patent-modal {
+        align-items: flex-start;
+        padding: 84px 16px 16px;
+    }
+
+    .patent-modal-dialog {
+        width: 100%;
+        max-height: calc(100vh - 100px);
+        padding: 28px 20px;
+        border-radius: 14px;
+    }
+
+    .modal-header {
+        padding-right: 34px;
+        margin-bottom: 20px;
+    }
+
+    .modal-header h2,
+    .details-title { font-size: 22px; }
+
+    .patent-result {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 12px;
+        padding: 15px;
+    }
+
+    .patent-view {
+        align-self: flex-start;
+        min-height: 40px;
+        padding: 9px 14px;
+    }
+
+    .details-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+    .container { width: calc(100% - 24px); }
+    .navbar { padding: 0 9px; }
+    .navbar-inner { gap: 8px; }
+    .brand { min-width: 0; }
+    .nav-login { font-size: 11px; white-space: nowrap; }
+
+    .patent-modal { padding: 84px 12px 12px; }
+    .patent-result { align-items: flex-start; }
+    .patent-view { width: 100%; }
+}
+
+@media (max-width: 360px) {
+    .nav-login { font-size: 10px; }
+}

@@ -1,0 +1,490 @@
+/* Hero — geometry, background stack, slides, controls.
+   Background layers on the carousel panel:
+    rotating campus photos + residual veil -> ::before tribal pattern,
+    masked to soften right -> ::after blue tint, also softened on
+    the right. Pattern and tint fade together without disappearing. */
+
+.hero {
+  position: relative;
+  width: 100%;
+  min-height: 860px;
+  padding: 0;
+  overflow: hidden;
+  background: #f6f8fc;
+}
+
+.hero .hero-carousel {
+  position: relative;
+  isolation: isolate;
+  z-index: 2;
+  width: 100vw;
+  height: 860px;
+  min-height: 860px;
+  margin-left: calc(50% - 50vw);
+  overflow: hidden;
+  background-color: #123087;
+  background-image: linear-gradient(120deg, rgba(13, 32, 92, 0.3), rgba(24, 53, 143, 0.22));
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: auto;
+  padding-bottom: 150px;
+  box-shadow: 0 30px 80px rgba(16, 40, 115, 0.2);
+}
+
+/* Tribal pattern — softened toward the right */
+.hero .hero-carousel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: url('../../images/backdrop/tribal_pattern.png') repeat;
+  background-size: 720px auto;
+  opacity: 0.7;
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 38%, rgba(0, 0, 0, 0.5) 62%, rgba(0, 0, 0, 0.18) 100%);
+  mask-image: linear-gradient(90deg, #000 0%, #000 38%, rgba(0, 0, 0, 0.5) 62%, rgba(0, 0, 0, 0.18) 100%);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Blue tint — strong on the left and subtle on the right */
+.hero .hero-carousel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    120deg,
+    rgba(13, 32, 92, 0.94) 0%,
+    rgba(18, 41, 115, 0.9) 40%,
+    rgba(29, 61, 163, 0.82) 100%
+  );
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 38%, rgba(0, 0, 0, 0.55) 62%, rgba(0, 0, 0, 0.2) 100%);
+  mask-image: linear-gradient(90deg, #000 0%, #000 38%, rgba(0, 0, 0, 0.55) 62%, rgba(0, 0, 0, 0.2) 100%);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Slides — content pinned to the LEFT edge of the panel */
+.hero-slide {
+  display: none;
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  height: 860px;
+  min-height: 860px;
+  padding: 118px max(60px, calc((100vw - 1160px) / 2)) 90px;
+  color: #ffffff;
+}
+
+.hero-slide.active {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.hero-slide-content {
+  position: relative;
+  z-index: 4;
+  width: min(760px, 100%);
+  text-align: left;
+  align-items: flex-start;
+}
+
+.hero-slide-content .hero-badge,
+.hero-slide-content h1,
+.hero-slide-content .hero-description {
+  margin-right: auto;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 7px 14px;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.hero-slide h1 {
+  max-width: 760px;
+  margin: 22px 0 0;
+  color: #ffffff;
+  font-size: clamp(50px, 5vw, 66px);
+  line-height: 1.08;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+}
+
+.hero-slide h1 span {
+  display: block;
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.hero-description {
+  max-width: 650px;
+  margin: 23px 0 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 16px;
+  margin-top: 30px;
+}
+
+.hero-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 43px;
+  padding: 10px 20px;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.hero-actions .btn:hover {
+  transform: translateY(-2px);
+}
+
+.btn-primary {
+  color: #102873;
+  background: #ffffff;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+}
+
+.btn-primary:hover {
+  background: #f4f7ff;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+
+.btn-secondary {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* School logo — right side, over the photo zone */
+.hero-school-logo {
+  position: absolute;
+  z-index: 5;
+  right: max(60px, calc((100vw - 1160px) / 2));
+  top: 50%;
+  transform: translateY(-50%);
+  width: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.hero-school-logo-img {
+  display: block;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+  background: radial-gradient(circle at 50% 55%, rgba(4, 10, 30, 0.32), transparent 62%);
+}
+
+/* Controls */
+.hero-carousel-controls {
+  position: absolute;
+  z-index: 10;
+  left: 50%;
+  bottom: 46px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.carousel-dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  transition:
+    width 0.25s ease,
+    background 0.25s ease;
+}
+
+.carousel-dot.active {
+  width: 24px;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.carousel-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-left: 9px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  font-size: 15px;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.carousel-arrow:hover {
+  background: rgba(255, 255, 255, 0.16);
+  transform: translateX(2px);
+}
+
+.carousel-arrow .icon-base {
+  font-size: 18px;
+}
+
+/* Entrance animations */
+.hero-slide.active .hero-badge {
+  animation: heroRise 0.65s ease 0.05s both;
+}
+.hero-slide.active h1 {
+  animation: heroHeadingIn 0.75s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+}
+.hero-slide.active .hero-description {
+  animation: heroRise 0.7s ease 0.29s both;
+}
+.hero-slide.active .hero-actions {
+  animation: heroRise 0.7s ease 0.4s both;
+}
+
+@keyframes heroRise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes heroHeadingIn {
+  from {
+    opacity: 0;
+    transform: translateY(35px);
+    filter: blur(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+/* Responsive — all hero breakpoints consolidated here */
+@media (max-width: 1100px) {
+  .hero-slide {
+    padding-left: 55px;
+    padding-right: 55px;
+  }
+  .hero-carousel-controls {
+    left: 55px;
+  }
+  .hero-school-logo {
+    right: 45px;
+    width: 190px;
+  }
+}
+
+@media (max-width: 1000px) {
+  .hero {
+    min-height: 680px;
+  }
+  .hero-carousel,
+  .hero-slide {
+    height: 680px;
+    min-height: 680px;
+  }
+  .hero-carousel {
+    padding-bottom: 120px;
+  }
+  .hero-slide {
+    padding: 90px 45px;
+  }
+  .hero-slide-content {
+    width: min(580px, 100%);
+  }
+  .hero-slide h1 {
+    font-size: 48px;
+  }
+  .hero-carousel-controls {
+    left: 45px;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-description {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  .hero-actions {
+    flex-direction: column;
+    align-items: flex-start;
+    max-width: 240px;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 760px) {
+  /* Stacked mobile text is full-width — the logo would
+       collide with it, so it's hidden here */
+  .hero-school-logo {
+    display: none;
+  }
+
+  .hero {
+    min-height: 740px;
+  }
+  .hero-carousel,
+  .hero-slide {
+    height: 740px;
+    min-height: 740px;
+  }
+  .hero-carousel {
+    padding-bottom: 130px;
+  }
+  .hero-slide {
+    padding: 104px 24px 96px;
+  }
+  .hero-slide.active {
+    display: block;
+  }
+  .hero-slide-content {
+    width: 100%;
+  }
+  .hero-slide h1 {
+    max-width: 100%;
+    margin-top: 18px;
+    font-size: clamp(44px, 11vw, 56px);
+    line-height: 1.05;
+  }
+  .hero-description {
+    max-width: 100%;
+    margin-top: 20px;
+    font-size: 15px;
+    line-height: 1.65;
+  }
+  .hero-actions {
+    margin-top: 27px;
+    gap: 10px;
+  }
+  .hero-actions .btn {
+    min-height: 41px;
+    padding: 9px 16px;
+    font-size: 13px;
+  }
+  .hero-carousel-controls {
+    bottom: 42px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero,
+  .hero-carousel,
+  .hero-slide {
+    min-height: 770px;
+  }
+  .hero-carousel,
+  .hero-slide {
+    height: 770px;
+  }
+  .hero-carousel {
+    padding-bottom: 140px;
+  }
+  .hero-slide {
+    padding: 94px 20px 104px;
+  }
+  .hero-slide h1 {
+    max-width: 100%;
+    font-size: 40px;
+    letter-spacing: -0.035em;
+  }
+  .hero-description {
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .hero-actions {
+    width: 100%;
+    max-width: 230px;
+  }
+  .hero-actions .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+  .hero-badge {
+    font-size: 8px;
+  }
+  .carousel-dot {
+    width: 22px;
+  }
+  .carousel-dot.active {
+    width: 38px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-school-logo::before,
+  .hero-school-logo::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* Rotating photo layers sit below the pattern/tint pseudos. */
+.hero-photo-base,
+.hero-photo-alt {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  transition: opacity 1.2s ease;
+  pointer-events: none;
+}
+
+.hero-photo-base {
+  background-image: url('../../images/hero-carousel/ripe.png');
+}
+
+.hero-photo-alt {
+  background-image: url('../../images/hero-carousel/slsu_main.png');
+  opacity: 0;
+}
+
+.hero-photo-alt.is-visible {
+  opacity: 1;
+}

@@ -1,0 +1,111 @@
+.patent-search {
+    display: flex;
+    align-items: center;
+}
+
+.search-input-wrapper {
+    position: relative;
+    width: 235px;
+    transition:
+        width 0.3s ease;
+}
+
+.search-input-wrapper::before {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    z-index: -1;
+    border-radius: 13px;
+    background:
+        linear-gradient(
+            110deg,
+            rgba(29, 61, 163, 0.18),
+            rgba(29, 61, 163, 0.04)
+        );
+    opacity: 0;
+    transition:
+        opacity 0.25s ease;
+}
+
+.search-input-wrapper:focus-within {
+    width: 315px;
+}
+
+.search-input-wrapper:focus-within::before {
+    opacity: 1;
+}
+
+.search-input-wrapper input {
+    width: 100%;
+    height: 45px;
+    padding: 0 47px 0 17px;
+    outline: none;
+    color: var(--blue-dark);
+    background:
+        rgba(255, 255, 255, 0.82);
+    border:
+        1px solid rgba(29, 61, 163, 0.20);
+    border-radius: 11px;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.8),
+        0 5px 18px rgba(16, 40, 115, 0.06);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.search-input-wrapper input::placeholder {
+    color: #65718a;
+    font-weight: 500;
+}
+
+.search-input-wrapper input:focus {
+    background: #ffffff;
+    border-color:
+        rgba(29, 61, 163, 0.45);
+    box-shadow:
+        0 0 0 4px rgba(29, 61, 163, 0.08),
+        0 8px 25px rgba(16, 40, 115, 0.10);
+}
+
+.search-submit {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    background:
+        linear-gradient(
+            135deg,
+            var(--blue-dark),
+            var(--blue-light)
+        );
+    color: #ffffff;
+    cursor: pointer;
+    box-shadow:
+        0 4px 10px rgba(16, 40, 115, 0.18);
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.search-submit:hover {
+    transform: scale(1.05);
+    box-shadow:
+        0 6px 15px rgba(16, 40, 115, 0.25);
+}
+
+.search-submit:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
