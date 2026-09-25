@@ -16,19 +16,14 @@ COPY postcss.config.js* ./
 RUN npm run build
 
 # =========================================================
-# STAGE 2 — Composer: PHP dependencies (PHP 8.2 to match the
-# runtime and the lock file's platform requirements)
+# STAGE 2 — Composer: PHP dependencies
 # =========================================================
 FROM php:8.2-cli AS vendor-build
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
-RUN apt-get update && apt-get install -y \
-        libpng-dev libjpeg-dev libfreetype6-dev \
-        libonig-dev libzip-dev zlib1g-dev unzip \
-    && docker-php-ext-install \
-        pdo_mysql mbstring zip gd exif \
-    && rm -rf /var/lib/apt/lists/*
+RUN install-php-extensions pdo_mysql mbstring zip gd exif
 
 WORKDIR /app
 
@@ -45,10 +40,9 @@ RUN composer install \
 # =========================================================
 FROM php:8.2-cli
 
-RUN apt-get update && apt-get install -y \
-    git zip unzip libpng-dev libonig-dev libxml2-dev libzip-dev \
-    && docker-php-ext-install pdo_mysql mbstring zip \
-    && rm -rf /var/lib/apt/lists/*
+COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+
+RUN install-php-extensions pdo_mysql mbstring zip gd exif opcache
 
 WORKDIR /app
 
