@@ -5,9 +5,6 @@ set -e
 mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache
 chmod -R 775 storage bootstrap/cache
 
-# SQLite — zero-config database for Render
-touch database/database.sqlite
-
 php artisan migrate --force
 php artisan storage:link || true
 
