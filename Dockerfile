@@ -16,14 +16,27 @@ COPY postcss.config.js* ./
 RUN npm run build
 
 # =========================================================
-# STAGE 2 — Composer: PHP dependencies
+# STAGE 2 — Composer: PHP dependencies (PHP 8.2 to match the
+# runtime and the lock file's platform requirements)
 # =========================================================
-FROM composer:2 AS vendor-build
+FROM php:8.2-cli AS vendor-build
+
+# Composer binary + the extensions the lock file needs
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+RUN apt-get update && apt-get install -y \
+        libpng-dev libzip-dev unzip \
+    && docker-php-ext-install pdo_mysql mbstring zip gd \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --optimize-autoloader --no-scripts
+RUN composer install \
+    --no-dev \
+    --optimize-autoloader \
+    --no-scripts \
+    --no-interaction \
+    --no-progress
 
 # =========================================================
 # STAGE 3 — Runtime: PHP app + compiled assets
