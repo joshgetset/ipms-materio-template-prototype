@@ -502,11 +502,11 @@
 }
 
 .hero-photo-base {
-  background-image: url('../../images/hero-carousel/ripe.png');
+  background-image: url('../../images/hero-carousel/ripe.jpg');
 }
 
 .hero-photo-alt {
-  background-image: url('../../images/hero-carousel/slsu_main.png');
+  background-image: url('../../images/hero-carousel/slsu_main.jpg');
   opacity: 0;
 }
 

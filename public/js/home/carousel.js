@@ -50,7 +50,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  const photoImages = ['ripe.png', 'slsu_main.png', 'landmark.jpg', 'RIES.JPG'];
+  const photoImages = ['ripe.jpg', 'slsu_main.jpg', 'landmark.jpg', 'RIES.JPG'];
 
   let currentPhoto = 0;
 
