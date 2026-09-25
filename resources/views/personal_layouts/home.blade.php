@@ -13,9 +13,14 @@
     rel="stylesheet">
 
 @vite('resources/assets/vendor/fonts/iconify/iconify.css')
-<link rel="stylesheet" href="{{ asset('css/home/home.css') }}">
+
+<link rel="stylesheet" href="{{ asset('css/home/base.css') }}">
 <link rel="stylesheet" href="{{ asset('css/home/navbar.css') }}">
 <link rel="stylesheet" href="{{ asset('css/home/hero_carousel.css') }}">
+<link rel="stylesheet" href="{{ asset('css/home/sections.css') }}">
+<link rel="stylesheet" href="{{ asset('css/home/patent_search.css') }}">
+<link rel="stylesheet" href="{{ asset('css/home/patent_modals.css') }}">
+<link rel="stylesheet" href="{{ asset('css/home/responsive.css') }}">
 <link rel="stylesheet" href="{{ asset('css/home/home_sections.css') }}">
 @endpush
 
