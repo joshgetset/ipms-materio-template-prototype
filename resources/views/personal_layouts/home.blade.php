@@ -37,6 +37,7 @@
 @endsection
 
 @push('scripts')
+<script src="{{ asset('js/home/navbar.js') }}" defer></script>
 <script src="{{ asset('js/home/home.js') }}" defer></script>
 <script src="{{ asset('js/home/carousel.js') }}" defer></script>
 <script src="{{ asset('js/home/side-nav.js') }}" defer></script>

@@ -10,10 +10,11 @@
                 class="brand-mark brand-mark-img">
 
             <div class="brand-text">
-                <span class="brand-name">
+                <span class="brand-name brand-name-full">
                     Intellectual Property<br>
                     Management System
                 </span>
+                <span class="brand-name brand-name-mobile">IPMS</span>
             </div>
         </a>
 

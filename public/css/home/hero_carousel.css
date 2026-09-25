@@ -304,7 +304,10 @@
   }
 }
 
-/* Responsive — all hero breakpoints consolidated here */
+/* Responsive — all hero breakpoints consolidated here.
+   Mobile: panels size to their CONTENT (no fixed surplus
+   height), slides clear the fixed navbar, and the controls
+   sit directly beneath the last button. Desktop untouched. */
 @media (max-width: 1100px) {
   .hero-slide {
     padding-left: 55px;
@@ -321,31 +324,36 @@
 
 @media (max-width: 1000px) {
   .hero {
-    min-height: 680px;
+    min-height: 0;
   }
   .hero-carousel,
   .hero-slide {
-    height: 680px;
-    min-height: 680px;
+    height: auto;
+    min-height: 0;
   }
   .hero-carousel {
-    padding-bottom: 120px;
+    padding-bottom: 64px;
   }
   .hero-slide {
-    padding: 90px 45px;
+    padding: 110px 45px 24px;
   }
   .hero-slide-content {
     width: min(580px, 100%);
   }
   .hero-slide h1 {
-    font-size: 48px;
+    font-size: 44px;
   }
   .hero-carousel-controls {
     left: 45px;
+    bottom: 18px;
   }
 }
 
 @media (max-width: 768px) {
+  .hero-school-logo {
+    display: none;
+  }
+
   .hero-description {
     font-size: 14px;
     line-height: 1.7;
@@ -360,54 +368,66 @@
 
 @media (max-width: 760px) {
   /* Stacked mobile text is full-width — the logo would
-       collide with it, so it's hidden here */
+     collide with it, so it's hidden here */
   .hero-school-logo {
     display: none;
   }
 
   .hero {
-    min-height: 740px;
+    min-height: 0;
   }
   .hero-carousel,
   .hero-slide {
-    height: 740px;
-    min-height: 740px;
+    height: auto;
+    min-height: 0;
   }
   .hero-carousel {
-    padding-bottom: 130px;
+    padding-bottom: 56px;
   }
   .hero-slide {
-    padding: 104px 24px 96px;
+    padding: 104px 24px 16px;
   }
   .hero-slide.active {
     display: block;
   }
   .hero-slide-content {
     width: 100%;
+    text-align: center;
+  }
+  .hero-slide-content .hero-badge,
+  .hero-slide-content h1,
+  .hero-slide-content .hero-description {
+    margin-left: auto;
+    margin-right: auto;
   }
   .hero-slide h1 {
     max-width: 100%;
-    margin-top: 18px;
-    font-size: clamp(44px, 11vw, 56px);
-    line-height: 1.05;
+    margin-top: 14px;
+    font-size: clamp(34px, 9vw, 44px);
+    line-height: 1.08;
   }
   .hero-description {
     max-width: 100%;
-    margin-top: 20px;
-    font-size: 15px;
-    line-height: 1.65;
+    margin-top: 14px;
+    font-size: 14px;
+    line-height: 1.6;
   }
   .hero-actions {
-    margin-top: 27px;
+    margin-top: 20px;
     gap: 10px;
+    align-items: center;
+    margin-left: auto;
+    margin-right: auto;
   }
   .hero-actions .btn {
-    min-height: 41px;
-    padding: 9px 16px;
+    min-height: 42px;
+    padding: 10px 18px;
     font-size: 13px;
   }
   .hero-carousel-controls {
-    bottom: 42px;
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
   }
 }
 
@@ -415,26 +435,26 @@
   .hero,
   .hero-carousel,
   .hero-slide {
-    min-height: 770px;
+    min-height: 0;
   }
   .hero-carousel,
   .hero-slide {
-    height: 770px;
+    height: auto;
   }
   .hero-carousel {
-    padding-bottom: 140px;
+    padding-bottom: 52px;
   }
   .hero-slide {
-    padding: 94px 20px 104px;
+    padding: 100px 20px 14px;
   }
   .hero-slide h1 {
     max-width: 100%;
-    font-size: 40px;
+    font-size: 30px;
     letter-spacing: -0.035em;
   }
   .hero-description {
     font-size: 13px;
-    line-height: 1.7;
+    line-height: 1.6;
   }
   .hero-actions {
     width: 100%;
@@ -442,16 +462,21 @@
   }
   .hero-actions .btn {
     width: 100%;
-    min-height: 44px;
+    min-height: 42px;
   }
   .hero-badge {
     font-size: 8px;
   }
   .carousel-dot {
-    width: 22px;
+    width: 20px;
   }
   .carousel-dot.active {
-    width: 38px;
+    width: 34px;
+  }
+  .hero-carousel-controls {
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
   }
 }
 

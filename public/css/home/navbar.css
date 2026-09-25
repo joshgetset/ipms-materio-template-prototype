@@ -258,6 +258,10 @@ html {
   color: var(--blue-dark);
 }
 
+.brand-name-mobile {
+  display: none;
+}
+
 .nav-links {
   display: flex;
   align-items: center;
@@ -574,6 +578,14 @@ html {
   .brand-name {
     font-size: 15px;
     line-height: 1.2;
+  }
+  .brand-name-full {
+    display: none;
+  }
+  .brand-name-mobile {
+    display: inline;
+    font-size: 18px;
+    letter-spacing: 0;
   }
   .nav-login {
     padding: 9px 12px;
