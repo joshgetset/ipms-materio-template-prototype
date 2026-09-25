@@ -10,6 +10,7 @@ RUN npm install
 
 COPY resources/ ./resources/
 COPY vite.config.js ./
+COPY vite.icons.plugin.js ./
 COPY tailwind.config.js* ./
 COPY postcss.config.js* ./
 
