@@ -48,6 +48,7 @@ RUN install-php-extensions pdo_mysql mbstring zip gd exif opcache
 WORKDIR /app
 
 COPY --from=vendor-build /usr/bin/composer /usr/bin/composer
+COPY --from=vendor-build /app/vendor ./vendor
 COPY --from=node-build /build/public/build ./public/build
 
 COPY . .
