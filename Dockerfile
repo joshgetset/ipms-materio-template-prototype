@@ -24,7 +24,7 @@ FROM php:8.2-cli AS vendor-build
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
-RUN install-php-extensions pdo_mysql pdo_pgsql mbstring zip gd exif
+RUN install-php-extensions pdo_mysql pdo_pgsql pdo_sqlite mbstring zip gd exif
 
 WORKDIR /app
 
@@ -43,7 +43,7 @@ FROM php:8.2-cli
 
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
-RUN install-php-extensions pdo_mysql pdo_pgsql mbstring zip gd exif opcache
+RUN install-php-extensions pdo_mysql pdo_pgsql pdo_sqlite mbstring zip gd exif opcache
 
 WORKDIR /app
 
