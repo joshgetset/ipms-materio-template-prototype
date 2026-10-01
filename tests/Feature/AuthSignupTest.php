@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Tests\TestCase;
 
@@ -19,7 +20,7 @@ class AuthSignupTest extends TestCase
       'password_confirmation' => 'StrongPass!2026',
     ]);
 
-    $response->assertRedirect('/login');
+    $response->assertRedirect('/dashboard');
     $this->assertDatabaseHas('users', [
       'email' => 'juan@example.com',
       'username' => 'juan123',
@@ -37,5 +38,19 @@ class AuthSignupTest extends TestCase
     ]);
 
     $response->assertSessionHasErrors('password');
+  }
+
+  public function test_authenticated_user_logout_returns_to_landing_page(): void
+  {
+    $user = User::factory()->create([
+      'username' => fake()->unique()->userName(),
+    ]);
+
+    $this->actingAs($user)
+      ->post(route('logout'))
+      ->assertRedirect(route('home'))
+      ->assertSessionHasNoErrors();
+
+    $this->assertGuest();
   }
 }

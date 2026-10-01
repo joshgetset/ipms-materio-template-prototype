@@ -17,7 +17,7 @@
     chartBgColor;
   heatMap2 = '#d5d6ff';
   heatMap3 = '#b7b9ff';
-  heatMap4 = '#696cff';
+  heatMap4 = '#2563eb';
   chartBgColor = '#F0F2F8';
   currentTheme = 'light';
 
@@ -45,7 +45,7 @@
     line: {
       series1: config.colors.warning,
       series2: config.colors.primary,
-      series3: '#7367f029'
+      series3: '#2563eb29'
     }
   };
 

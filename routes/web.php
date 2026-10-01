@@ -47,6 +47,8 @@ use App\Http\Controllers\tables\Basic as TablesBasic;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\PatentController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\InnovationDisclosureController;
+use App\Http\Controllers\AdminDashboardController;
 
 /*
 |--------------------------------------------------------------------------
@@ -78,8 +80,36 @@ Route::post('/signin', [AuthController::class, 'signin'])
 |--------------------------------------------------------------------------
 */
 
-Route::get('/dashboard', [Analytics::class, 'index'])
-    ->name('dashboard-analytics');
+Route::middleware('auth')->group(function () {
+    Route::get('/admin_dashboard', [AdminDashboardController::class, 'index'])
+        ->name('admin-dashboard.index');
+    Route::get('/admin_dashboard/disclosures/{disclosure}', [AdminDashboardController::class, 'showReview'])
+        ->whereNumber('disclosure')
+        ->name('admin-dashboard.disclosures.show');
+    Route::post('/admin_dashboard/disclosures/{disclosure}/review', [AdminDashboardController::class, 'updateReview'])
+        ->name('admin-dashboard.review');
+    Route::post('/admin_dashboard/attachments/{attachment}/review', [AdminDashboardController::class, 'updateAttachmentReview'])
+        ->name('admin-dashboard.attachments.review');
+    Route::get('/dashboard', [InnovationDisclosureController::class, 'index'])
+        ->name('dashboard-analytics');
+    Route::get('/dashboard/innovation-disclosure', [InnovationDisclosureController::class, 'create'])
+        ->name('dashboard.innovation-disclosure.create');
+    Route::post('/dashboard/innovation-disclosures', [InnovationDisclosureController::class, 'store'])
+        ->name('dashboard.innovation-disclosures.store');
+    Route::get('/dashboard/submissions', [InnovationDisclosureController::class, 'submissions'])
+        ->name('dashboard.submissions.index');
+    Route::get('/dashboard/submissions/{disclosure}', [InnovationDisclosureController::class, 'showSubmission'])
+        ->whereNumber('disclosure')
+        ->name('dashboard.submissions.show');
+    Route::get('/dashboard/submissions/status-updates', [InnovationDisclosureController::class, 'submissionStatusUpdates'])
+        ->name('dashboard.submissions.status-updates');
+    Route::post('/dashboard/submissions/{disclosure}/attachments', [InnovationDisclosureController::class, 'storeAttachment'])
+        ->name('dashboard.submissions.attachments.store');
+    Route::delete('/dashboard/submissions/{disclosure}', [InnovationDisclosureController::class, 'destroy'])
+        ->name('dashboard.submissions.destroy');
+    Route::get('/dashboard/submissions/{disclosure}/attachments/{attachment}', [InnovationDisclosureController::class, 'downloadAttachment'])
+        ->name('dashboard.submissions.attachments.download');
+});
 
 // layout
 Route::get('/layouts/without-menu', [WithoutMenu::class, 'index'])->name('layouts-without-menu');

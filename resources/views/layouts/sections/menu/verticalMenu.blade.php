@@ -1,7 +1,7 @@
 @php
 use Illuminate\Support\Facades\Route;
 @endphp
-<aside id="layout-menu" class="layout-menu menu-vertical menu">
+<aside id="layout-menu" class="layout-menu menu-vertical menu shadow-lg">
 
     <!-- ! Hide app brand if navbar-full -->
     <div class="app-brand demo">
@@ -10,15 +10,16 @@ use Illuminate\Support\Facades\Route;
             <span class="app-brand-text demo menu-text fw-semibold ms-2">{{config('variables.templateName')}}</span>
         </a>
 
-        <a href="javascript:void(0);" class="layout-menu-toggle menu-link text-large ms-auto">
-            <i class="menu-toggle-icon d-xl-inline-block align-middle"></i>
-        </a>
     </div>
 
     <div class="menu-inner-shadow"></div>
 
     <ul class="menu-inner py-1">
         @foreach ($menuData[0]->menu as $menu)
+
+        @if (!empty($menu->adminOnly) && !auth()->user()?->is_admin)
+        @continue
+        @endif
 
         {{-- adding active and open class if child is active --}}
 

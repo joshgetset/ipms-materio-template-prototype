@@ -27,6 +27,56 @@
   padding-top: 64px !important;
 }
 
+.layout-navbar-fixed .layout-navbar.navbar-detached {
+  transition:
+    margin-top 0.2s ease,
+    border-radius 0.2s ease,
+    box-shadow 0.2s ease,
+    inline-size 0.2s ease,
+    inset-inline-start 0.2s ease;
+}
+
+.layout-navbar-fixed .layout-navbar.navbar-detached.navbar-docked {
+  top: 0;
+  margin-top: 0 !important;
+  border-radius: 0 0 0.75rem 0.75rem !important;
+  box-shadow: 0 8px 24px rgba(16, 40, 115, 0.12);
+  margin-inline: 0 !important;
+  inset-inline-start: var(--navbar-dock-start, 0px);
+  inline-size: calc(100% - var(--navbar-dock-start, 0px)) !important;
+  max-inline-size: none !important;
+}
+
+.layout-navbar-fixed .layout-navbar.navbar-detached.navbar-docked > .navbar-nav-right {
+  flex: 0 0 var(--navbar-content-width);
+  inline-size: var(--navbar-content-width);
+  margin-inline-start: var(--navbar-content-offset);
+  margin-inline-end: 0;
+}
+
+.page-breadcrumb {
+  margin-block-start: 1rem;
+}
+
+.page-breadcrumb .breadcrumb-icon {
+  margin-inline-start: 0.375rem;
+}
+
+.page-content__divider {
+  margin-block: 1rem;
+}
+
+.admin-submissions-table {
+  min-width: 960px;
+  table-layout: fixed;
+}
+
+@media (min-width: 1200px) {
+  .layout-navbar-fixed .layout-navbar.navbar-detached.navbar-docked {
+    z-index: 1081;
+  }
+}
+
 /* Navbar page z-index issue solution */
 .content-wrapper .navbar {
   z-index: auto;

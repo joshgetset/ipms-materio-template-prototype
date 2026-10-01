@@ -77,7 +77,7 @@ class AuthController extends Controller
             $request->session()->flash('toast_type', 'success');
             $request->session()->flash('toast_message', 'Signed in successfully. Redirecting to your workspace...');
 
-            return redirect()->route('home');
+            return redirect()->route($request->user()->is_admin ? 'admin-dashboard.index' : 'dashboard-analytics');
         }
 
         return redirect()
@@ -133,7 +133,7 @@ class AuthController extends Controller
         $request->session()->flash('toast_type', 'success');
         $request->session()->flash('toast_message', 'Account created successfully. Welcome to IPMS!');
 
-        return redirect('/login');
+        return redirect()->route('dashboard-analytics');
     }
 
     public function logout(Request $request)

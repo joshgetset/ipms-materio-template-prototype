@@ -60,6 +60,57 @@ $container = ($container ?? 'container-xxl');
                     <div class="{{ $container }} flex-grow-1 container-p-y">
                         @endif
 
+                        @php
+                        $breadcrumbs = match (request()->route()?->getName()) {
+                        'dashboard-analytics' => [
+                        ['label' => 'Home', 'url' => route('dashboard-analytics')],
+                        ['label' => 'Dashboard'],
+                        ],
+                        'admin-dashboard.index' => [
+                        ['label' => 'Home', 'url' => route('dashboard-analytics')],
+                        ['label' => 'Admin Dashboard'],
+                        ],
+                        'admin-dashboard.disclosures.show' => [
+                        ['label' => 'Home', 'url' => route('dashboard-analytics')],
+                        ['label' => 'Admin Dashboard', 'url' => route('admin-dashboard.index')],
+                        ['label' => 'Review Submission'],
+                        ],
+                        'dashboard.innovation-disclosure.create' => [
+                        ['label' => 'Home', 'url' => route('dashboard-analytics')],
+                        ['label' => 'Innovation Disclosure'],
+                        ],
+                        'dashboard.submissions.index' => [
+                        ['label' => 'Home', 'url' => route('dashboard-analytics')],
+                        ['label' => 'Submissions'],
+                        ],
+                        'dashboard.submissions.show' => [
+                        ['label' => 'Home', 'url' => route('dashboard-analytics')],
+                        ['label' => 'Submissions', 'url' => route('dashboard.submissions.index')],
+                        ['label' => 'Review Submission'],
+                        ],
+                        default => [
+                        ['label' => 'Home', 'url' => route('dashboard-analytics')],
+                        ['label' => trim($__env->yieldContent('title', 'Page')) ?: 'Page'],
+                        ],
+                        };
+                        @endphp
+                        <nav class="page-breadcrumb mb-6" aria-label="Breadcrumb">
+                            <ol class="breadcrumb breadcrumb-custom-icon mb-0">
+                                @foreach ($breadcrumbs as $breadcrumb)
+                                <li class="breadcrumb-item {{ $loop->last ? 'active' : '' }}">
+                                    @if (! $loop->last && isset($breadcrumb['url']))
+                                    <a href="{{ $breadcrumb['url'] }}">{{ $breadcrumb['label'] }}</a>
+                                    @else
+                                    <span @if ($loop->last) aria-current="page" @endif>{{ $breadcrumb['label'] }}</span>
+                                    @endif
+                                    @unless ($loop->last)
+                                    <i class="breadcrumb-icon icon-base ri ri-arrow-right-s-line align-middle" aria-hidden="true"></i>
+                                    @endunless
+                                </li>
+                                @endforeach
+                            </ol>
+                        </nav>
+
                         @yield('content')
 
                     </div>

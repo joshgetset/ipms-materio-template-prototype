@@ -2,9 +2,9 @@
 <html
     lang="en"
     dir="ltr"
+    class="layout-menu-fixed layout-navbar-fixed"
     data-bs-theme="light"
-    data-template="vertical-menu-template"
->
+    data-template="vertical-menu-template">
 
 <head>
 
@@ -12,8 +12,7 @@
 
     <meta
         name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    />
+        content="width=device-width, initial-scale=1.0" />
 
     <title>
         @yield('title', 'Dashboard') | {{ config('app.name', 'IPMS') }}
@@ -21,24 +20,21 @@
 
     <meta
         name="description"
-        content="Intellectual Property Management System"
-    />
+        content="Intellectual Property Management System" />
 
     <meta
         name="csrf-token"
-        content="{{ csrf_token() }}"
-    />
+        content="{{ csrf_token() }}" />
 
     <!-- Favicon -->
     <link
         rel="icon"
         type="image/x-icon"
-        href="{{ asset('assets/img/favicon/favicon.ico') }}"
-    />
+        href="{{ asset('assets/img/favicon/favicon.ico') }}" />
 
     @if (empty($skipTemplateAssets))
-        <!-- Materio Styles -->
-        @include('layouts/sections/styles')
+    <!-- Materio Styles -->
+    @include('layouts/sections/styles')
     @endif
 
     @stack('styles')
@@ -50,16 +46,15 @@
 
 <body
     data-toast-type="{{ e(session('toast_type') ?? 'success') }}"
-    data-toast-message="{{ e(session('toast_message') ?? '') }}"
->
+    data-toast-message="{{ e(session('toast_message') ?? '') }}">
 
     <!-- Layout Content -->
     @yield('layoutContent')
     <!-- / Layout Content -->
 
     @if (empty($skipTemplateAssets))
-        <!-- Materio Scripts -->
-        @include('layouts/sections/scripts')
+    <!-- Materio Scripts -->
+    @include('layouts/sections/scripts')
     @endif
 
     @stack('scripts')

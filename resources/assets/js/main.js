@@ -4,11 +4,71 @@
 
 'use strict';
 
+import Swal from 'sweetalert2';
+import 'sweetalert2/dist/sweetalert2.min.css';
+
 let menu, animate;
 document.addEventListener('DOMContentLoaded', function () {
   // class for ios specific styles
   if (navigator.userAgent.match(/iPhone|iPad|iPod/i)) {
     document.body.classList.add('ios');
+  }
+
+  const logoutForm = document.querySelector('[data-logout-form]');
+  if (logoutForm) {
+    let confirmationPending = false;
+
+    logoutForm.addEventListener('submit', async event => {
+      if (logoutForm.dataset.confirmed === 'true') return;
+
+      event.preventDefault();
+      if (confirmationPending) return;
+      confirmationPending = true;
+
+      const result = await Swal.fire({
+        title: 'Log out?',
+        text: 'Are you sure you want to log out of your account?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Log out',
+        cancelButtonText: 'Stay signed in',
+        reverseButtons: true,
+        focusCancel: true
+      });
+
+      confirmationPending = false;
+      if (!result.isConfirmed) return;
+
+      logoutForm.dataset.confirmed = 'true';
+      HTMLFormElement.prototype.submit.call(logoutForm);
+    });
+  }
+
+  const navbar = document.querySelector('.layout-navbar.navbar-detached');
+  if (navbar) {
+    const initialMarginTop = Number.parseFloat(window.getComputedStyle(navbar).marginTop) || 0;
+    const dockThreshold = navbar.offsetHeight + initialMarginTop;
+    const captureDockBounds = () => {
+      const menu = document.querySelector('.layout-menu');
+      const menuRight = menu?.getBoundingClientRect().right ?? 0;
+      const navbarRect = navbar.getBoundingClientRect();
+      const content = navbar.querySelector('.navbar-nav-right');
+
+      navbar.style.setProperty('--navbar-dock-start', `${menuRight}px`);
+      navbar.style.setProperty('--navbar-content-offset', `${Math.max(0, navbarRect.left - menuRight)}px`);
+      navbar.style.setProperty(
+        '--navbar-content-width',
+        `${content?.getBoundingClientRect().width ?? navbarRect.width}px`
+      );
+    };
+    const updateDockState = () => {
+      const shouldDock = window.scrollY > dockThreshold;
+      if (shouldDock && !navbar.classList.contains('navbar-docked')) captureDockBounds();
+      navbar.classList.toggle('navbar-docked', shouldDock);
+    };
+
+    window.addEventListener('scroll', updateDockState, { passive: true });
+    updateDockState();
   }
 });
 
@@ -44,7 +104,7 @@ document.addEventListener('DOMContentLoaded', function () {
   menuToggler.forEach(item => {
     item.addEventListener('click', event => {
       event.preventDefault();
-      window.Helpers.toggleCollapsed();
+      window.Helpers.setCollapsed(false);
     });
   });
 
@@ -66,7 +126,7 @@ document.addEventListener('DOMContentLoaded', function () {
       clearTimeout(timeout);
     };
   };
-  if (document.getElementById('layout-menu')) {
+  if (document.querySelector('#layout-menu .layout-menu-toggle')) {
     delay(document.getElementById('layout-menu'), function () {
       // not for small screen
       if (!Helpers.isSmallScreen()) {
@@ -116,6 +176,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Auto update layout based on screen size
   window.Helpers.setAutoUpdate(true);
+  window.Helpers.update();
 
   // Toggle Password Visibility
   window.Helpers.initPasswordToggle();
@@ -123,16 +184,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // Speech To Text
   window.Helpers.initSpeechToText();
 
-  // Manage menu expanded/collapsed with templateCustomizer & local storage
-  //------------------------------------------------------------------
-
-  // If current layout is horizontal OR current window screen is small (overlay menu) than return from here
-  if (window.Helpers.isSmallScreen()) {
-    return;
+  if (document.querySelector('#layout-menu')) {
+    window.Helpers.setCollapsed(false, false);
   }
-
-  // If current layout is vertical and current window screen is > small
-
-  // Auto update menu collapsed/expanded based on the themeConfig
-  window.Helpers.setCollapsed(true, false);
 })();
