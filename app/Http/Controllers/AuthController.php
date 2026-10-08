@@ -77,7 +77,7 @@ class AuthController extends Controller
             $request->session()->flash('toast_type', 'success');
             $request->session()->flash('toast_message', 'Signed in successfully. Redirecting to your workspace...');
 
-            return redirect()->route($request->user()->is_admin ? 'admin-dashboard.index' : 'dashboard-analytics');
+            return redirect()->route($request->user()->is_evaluator ? 'evaluator-dashboard.index' : 'dashboard-analytics');
         }
 
         return redirect()

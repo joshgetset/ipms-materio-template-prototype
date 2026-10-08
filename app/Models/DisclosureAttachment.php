@@ -14,6 +14,8 @@ class DisclosureAttachment extends Model
     'mime_type',
     'size_bytes',
     'version',
+    'submitted_at',
+    'is_latest_submission',
     'needs_revision',
     'revision_notes',
   ];
@@ -23,6 +25,8 @@ class DisclosureAttachment extends Model
     return [
       'needs_revision' => 'boolean',
       'version' => 'integer',
+      'submitted_at' => 'datetime',
+      'is_latest_submission' => 'boolean',
     ];
   }
 

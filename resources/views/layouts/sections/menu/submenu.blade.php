@@ -9,24 +9,13 @@ use Illuminate\Support\Facades\Route;
     {{-- active menu method --}}
     @php
       $activeClass = null;
-      $active = 'active open';
       $currentRouteName = Route::currentRouteName();
+      $submenuSlugs = (array) $submenu->slug;
 
-      if ($currentRouteName === $submenu->slug) {
-          $activeClass = 'active';
-      }
-      elseif (isset($submenu->submenu)) {
-        if (gettype($submenu->slug) === 'array') {
-          foreach($submenu->slug as $slug){
-            if (str_contains($currentRouteName,$slug) and strpos($currentRouteName,$slug) === 0) {
-                $activeClass = $active;
-            }
-          }
-        }
-        else{
-          if (str_contains($currentRouteName,$submenu->slug) and strpos($currentRouteName,$submenu->slug) === 0) {
-            $activeClass = $active;
-          }
+      foreach ($submenuSlugs as $slug) {
+        if ($currentRouteName === $slug || str_starts_with($currentRouteName, $slug . '.')) {
+          $activeClass = isset($submenu->submenu) ? 'active open' : 'active';
+          break;
         }
       }
     @endphp

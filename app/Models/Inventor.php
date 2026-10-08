@@ -12,8 +12,18 @@ class Inventor extends Model
     'first_name',
     'suffix',
     'middle_initial',
+    'full_name',
+    'email',
     'country_of_citizenship',
     'affiliation',
+    'position_affiliation',
+    'technical_contribution',
+    'contribution_percent',
+    'contribution_nature',
+    'contribution_other',
+    'signature_name',
+    'declaration_confirmed',
+    'declaration_date',
     'is_primary',
   ];
 
@@ -21,6 +31,10 @@ class Inventor extends Model
   {
     return [
       'is_primary' => 'boolean',
+      'contribution_nature' => 'array',
+      'contribution_percent' => 'decimal:2',
+      'declaration_confirmed' => 'boolean',
+      'declaration_date' => 'date',
     ];
   }
 

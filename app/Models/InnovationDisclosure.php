@@ -15,6 +15,12 @@ class InnovationDisclosure extends Model
   protected $fillable = [
     'email',
     'mobile_no',
+    'lead_creator_name',
+    'college_department',
+    'campus',
+    'other_relationship',
+    'date_of_creation',
+    'disclosure_date',
     'technology_title',
     'technology_type',
     'university_relationship',
@@ -25,18 +31,32 @@ class InnovationDisclosure extends Model
     'research_title',
     'research_approval_date',
     'background_summary',
+    'abstract_summary',
+    'technical_field',
+    'invention_summary',
     'detailed_description',
     'drawings_description',
+    'examples_results',
+    'file_drive_link',
+    'total_development_cost',
+    'received_by',
+    'date_received',
     'status',
+    'endorsed_at',
     'review_notes',
   ];
 
   protected function casts(): array
   {
     return [
-      'research_approval_date' => 'date',
       'has_substantial_support' => 'boolean',
       'ownership_consent' => 'boolean',
+      'research_approval_date' => 'date',
+      'date_of_creation' => 'date',
+      'disclosure_date' => 'date',
+      'date_received' => 'date',
+      'total_development_cost' => 'decimal:2',
+      'endorsed_at' => 'datetime',
     ];
   }
 
@@ -53,5 +73,15 @@ class InnovationDisclosure extends Model
   public function attachments(): HasMany
   {
     return $this->hasMany(DisclosureAttachment::class);
+  }
+
+  public function costItems(): HasMany
+  {
+    return $this->hasMany(DisclosureCostItem::class);
+  }
+
+  public function technologies(): HasMany
+  {
+    return $this->hasMany(DisclosureTechnology::class);
   }
 }

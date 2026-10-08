@@ -1,10 +1,19 @@
 {
   "menu": [
     {
+      "menuHeader": "Evaluator",
+      "evaluatorOnly": true
+    },
+    {
+      "menuHeader": "Inventors",
+      "submitterOnly": true
+    },
+    {
       "url": "/dashboard",
       "name": "Dashboard",
       "icon": "menu-icon icon-base ri ri-file-list-3-line",
       "slug": "dashboard",
+      "submitterOnly": true,
       "submenu": [
         {
           "url": "/dashboard",
@@ -24,11 +33,26 @@
       ]
     },
     {
-      "url": "/admin_dashboard",
-      "name": "Admin Dashboard",
+      "url": "/evaluator_dashboard",
+      "name": "Evaluator Dashboard",
       "icon": "menu-icon icon-base ri ri-shield-user-line",
-      "slug": "admin-dashboard.index",
-      "adminOnly": true
+      "slug": "evaluator-dashboard",
+      "evaluatorOnly": true,
+      "submenu": [
+        {
+          "url": "/evaluator_dashboard",
+          "name": "Overview",
+          "slug": "evaluator-dashboard.index"
+        },
+        {
+          "url": "/evaluator_dashboard/submissions",
+          "name": "Innovation Submission",
+          "slug": [
+            "evaluator-dashboard.submissions",
+            "evaluator-dashboard.disclosures"
+          ]
+        }
+      ]
     }
   ]
 }

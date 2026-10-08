@@ -10,13 +10,24 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Throwable;
 use App\Models\DisclosureAttachment;
+use App\Models\DisclosureTechnologyFile;
 use App\Models\InnovationDisclosure;
 
 class InnovationDisclosureController extends Controller
 {
-  private const STATUSES = ['submitted', 'under_review', 'returned', 'endorsed', 'filed'];
+  private const STATUSES = ['submitted', 'under_review', 'revised_submission', 'returned', 'endorsed', 'filed'];
+  private const TECHNOLOGY_NARRATIVES = [
+    'abstract_summary',
+    'technical_field',
+    'background_summary',
+    'invention_summary',
+    'detailed_description',
+    'examples_results',
+  ];
 
   public function index(Request $request): View
   {
@@ -59,13 +70,13 @@ class InnovationDisclosureController extends Controller
 
   public function showSubmission(Request $request, InnovationDisclosure $disclosure): View
   {
-    $ownedDisclosure = $request->user()->innovationDisclosures()
-      ->with(['attachments', 'inventors'])
+    $ownedDisclosure = $request->user()
+      ->innovationDisclosures()
+      ->with(['attachments', 'inventors', 'costItems', 'technologies.files'])
       ->findOrFail($disclosure->id);
 
     return view('content.dashboard.my-submissions.index', [
       'disclosures' => collect([$ownedDisclosure]),
-      'deletedDisclosures' => collect(),
       'detailView' => true,
     ]);
   }
@@ -74,7 +85,7 @@ class InnovationDisclosureController extends Controller
   {
     return response()->json(
       $request->user()->innovationDisclosures()
-        ->with('attachments:id,innovation_disclosure_id,type,needs_revision,revision_notes')
+        ->with('attachments:id,innovation_disclosure_id,type,needs_revision,revision_notes,is_latest_submission,version')
         ->latest()
         ->get(['id', 'status', 'review_notes', 'updated_at'])
     );
@@ -97,9 +108,7 @@ class InnovationDisclosureController extends Controller
     InnovationDisclosure $disclosure,
     DisclosureAttachment $attachment
   ) {
-    $ownedDisclosure = $request->user()->is_admin
-      ? $disclosure
-      : $request->user()->innovationDisclosures()->findOrFail($disclosure->id);
+    $ownedDisclosure = $request->user()->innovationDisclosures()->findOrFail($disclosure->id);
     $ownedAttachment = $ownedDisclosure->attachments()->findOrFail($attachment->id);
 
     abort_unless(Storage::disk('local')->exists($ownedAttachment->stored_path), 404);
@@ -116,139 +125,406 @@ class InnovationDisclosureController extends Controller
     ]);
   }
 
+  public function previewAttachment(
+    Request $request,
+    InnovationDisclosure $disclosure,
+    DisclosureAttachment $attachment
+  ): BinaryFileResponse {
+    $ownedDisclosure = $request->user()->innovationDisclosures()->findOrFail($disclosure->id);
+    $ownedAttachment = $ownedDisclosure->attachments()->findOrFail($attachment->id);
+    $extension = strtolower(pathinfo($ownedAttachment->original_name, PATHINFO_EXTENSION));
+    $inlineTypes = [
+      'pdf' => 'application/pdf',
+      'jpg' => 'image/jpeg',
+      'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+    ];
+
+    abort_unless(isset($inlineTypes[$extension]), 415);
+
+    $disk = Storage::disk('local');
+    abort_unless($disk->exists($ownedAttachment->stored_path), 404);
+
+    return response()->file($disk->path($ownedAttachment->stored_path), [
+      'Content-Type' => $inlineTypes[$extension],
+      'X-Content-Type-Options' => 'nosniff',
+    ])->setContentDisposition(
+      ResponseHeaderBag::DISPOSITION_INLINE,
+      $ownedAttachment->original_name
+    );
+  }
+
+  public function previewTechnologyFile(
+    Request $request,
+    InnovationDisclosure $disclosure,
+    DisclosureTechnologyFile $file
+  ): BinaryFileResponse {
+    abort_unless(
+      $request->user()->is_evaluator || $disclosure->user_id === $request->user()->id,
+      403
+    );
+    $technology = $disclosure->technologies()
+      ->whereHas('files', fn ($query) => $query->whereKey($file->id))
+      ->firstOrFail();
+    $ownedFile = $technology->files()->findOrFail($file->id);
+    abort_unless(Storage::disk('local')->exists($ownedFile->stored_path), 404);
+
+    return response()->file(Storage::disk('local')->path($ownedFile->stored_path), [
+      'Content-Type' => 'application/pdf',
+      'X-Content-Type-Options' => 'nosniff',
+    ])->setContentDisposition(
+      ResponseHeaderBag::DISPOSITION_INLINE,
+      $ownedFile->original_name
+    );
+  }
+
   public function storeAttachment(Request $request, InnovationDisclosure $disclosure): RedirectResponse
   {
     $ownedDisclosure = $request->user()->innovationDisclosures()->findOrFail($disclosure->id);
-    $validated = $request->validate([
-      'type' => ['required', Rule::in(['drawings', 'methodology', 'assistance_form'])],
-      'file' => $this->attachmentRules(true),
-    ]);
+    abort_unless(
+      in_array($ownedDisclosure->status, ['under_review', 'returned', 'revised_submission'], true),
+      409,
+      'Files cannot be changed until the evaluator reviews this submission.'
+    );
 
-    $file = $validated['file'];
-    $storageDirectory = "innovation-disclosures/{$ownedDisclosure->id}/{$validated['type']}";
-    $oldAttachment = $ownedDisclosure->attachments()->where('type', $validated['type'])->first();
-    $oldPath = $oldAttachment?->stored_path;
-    $newPath = $file->store($storageDirectory, 'local');
-
-    if (! is_string($newPath)) {
-      throw new \RuntimeException('The uploaded attachment could not be stored.');
+    $attachments = $request->file('attachments', []);
+    if ($request->hasFile('file')) {
+      $legacyType = $request->validate([
+        'type' => ['required', Rule::in(['drawings', 'methodology', 'assistance_form'])],
+      ])['type'];
+      $attachments[$legacyType] = $request->file('file');
+      $request->files->set('attachments', $attachments);
     }
 
+    $rules = [
+      'attachments' => ['required', 'array:drawings,methodology,assistance_form,deed_assignment,sample_photo,additional_signed_sheet', 'min:1'],
+    ];
+    $messages = [];
+    foreach (['drawings', 'methodology', 'assistance_form', 'deed_assignment', 'sample_photo', 'additional_signed_sheet'] as $type) {
+      $rules["attachments.{$type}"] = $this->attachmentRules();
+      $messages["attachments.{$type}.mimes"] = 'All uploaded files must be PDF documents.';
+    }
+    $validated = $request->validate($rules, $messages);
+
+    $uploadedFiles = array_filter(
+      $validated['attachments'],
+      fn (mixed $file): bool => $file instanceof UploadedFile
+    );
+    if ($uploadedFiles === []) {
+      $request->validate([
+        'attachments' => ['required', 'array', 'min:1'],
+      ]);
+    }
+
+    $updates = [];
+    foreach ($uploadedFiles as $type => $file) {
+      $attachment = $ownedDisclosure->attachments()->where('type', $type)->first();
+      abort_unless($attachment?->needs_revision, 409, 'Only files marked for revision can be updated.');
+      $updates[$type] = [
+        'attachment' => $attachment,
+        'file' => $file,
+      ];
+    }
+
+    $newPaths = [];
+    $newPathsByType = [];
+    $oldPaths = [];
     try {
-      DB::transaction(function () use ($ownedDisclosure, $validated, $file, $newPath, $oldAttachment): void {
-        $attachment = $oldAttachment ?? new DisclosureAttachment();
-        $attachment->fill([
-          'type' => $validated['type'],
-          'original_name' => $file->getClientOriginalName(),
-          'stored_path' => $newPath,
-          'mime_type' => $file->getMimeType(),
-          'size_bytes' => $file->getSize(),
-          'version' => ($oldAttachment?->version ?? 0) + 1,
-          'needs_revision' => false,
-          'revision_notes' => null,
-        ]);
-        $ownedDisclosure->attachments()->save($attachment);
+      foreach ($updates as $type => $update) {
+        $newPath = $update['file']->store("innovation-disclosures/{$ownedDisclosure->id}/{$type}", 'local');
+        if (! is_string($newPath)) {
+          throw new \RuntimeException('The uploaded attachment could not be stored.');
+        }
+        $newPaths[] = $newPath;
+        $newPathsByType[$type] = $newPath;
+      }
+
+      DB::transaction(function () use ($ownedDisclosure, $updates, $newPathsByType, &$oldPaths): void {
+        foreach ($updates as $type => $update) {
+          $attachment = $update['attachment'];
+          $file = $update['file'];
+          $oldPaths[] = $attachment->stored_path;
+          $attachment->update([
+            'original_name' => $file->getClientOriginalName(),
+            'stored_path' => $newPathsByType[$type],
+            'mime_type' => $file->getMimeType(),
+            'size_bytes' => $file->getSize(),
+            'version' => $attachment->version + 1,
+            'submitted_at' => now(),
+            'is_latest_submission' => true,
+            'needs_revision' => false,
+            'revision_notes' => null,
+          ]);
+        }
+        $hasRemainingRevisions = $ownedDisclosure->attachments()
+          ->where('needs_revision', true)
+          ->exists();
+        $ownedDisclosure->update($hasRemainingRevisions
+          ? ['status' => 'returned']
+          : ['status' => 'revised_submission', 'review_notes' => null]);
       });
     } catch (Throwable $exception) {
-      Storage::disk('local')->delete($newPath);
+      Storage::disk('local')->delete($newPaths);
       throw $exception;
     }
 
-    if ($oldPath !== null) {
-      Storage::disk('local')->delete($oldPath);
-    }
+    Storage::disk('local')->delete($oldPaths);
 
-    return redirect()
-      ->route('dashboard.submissions.index')
+    $redirect = $request->boolean('return_to_review')
+      ? redirect()->route('dashboard.submissions.show', $ownedDisclosure)
+      : redirect()->route('dashboard.submissions.index');
+
+    return $redirect
       ->with('toast_type', 'success')
-      ->with('toast_message', $oldAttachment
-        ? 'The attachment revision was uploaded successfully.'
-        : 'The attachment was uploaded successfully.');
+      ->with('toast_message', 'The revised file upload was submitted successfully.');
   }
 
   public function store(Request $request): RedirectResponse
   {
     $ownershipDeclaration = $request->input('ownership_declaration');
-    $isSlsuEmployee = $request->input('university_relationship') === 'employee';
-    $isSlsuFunded = $request->input('funding_source') === 'slsu_funded';
-    $isSlsuOwned = $isSlsuEmployee && ($isSlsuFunded || $request->boolean('has_substantial_support'));
-    $ownershipOptions = $isSlsuOwned
-      ? ['not_applicable']
-      : ['assign_to_slsu', 'retain_ownership'];
-    $inventorKeys = array_keys($request->input('inventors', []));
-
-    $validated = $request->validate([
-      'email' => ['required', 'email', 'max:255'],
-      'mobile_no' => ['required', 'string', 'max:20', 'regex:/^(09|\\+639)\d{9}$/'],
-      'technology_title' => ['required', 'string', 'max:500'],
-      'technology_type' => ['required', Rule::in(['chemical', 'mechanical', 'literary_creative'])],
-      'university_relationship' => ['required', Rule::in(['student', 'employee', 'outsider'])],
-      'funding_source' => ['required', Rule::in(['personal', 'slsu_funded', 'externally_funded'])],
-      'has_substantial_support' => [
-        Rule::requiredIf($isSlsuEmployee && ! $isSlsuFunded),
-        Rule::prohibitedIf(! $isSlsuEmployee || $isSlsuFunded),
-        'nullable',
-        'boolean',
-      ],
-      'ownership_declaration' => ['required', Rule::in($ownershipOptions)],
-      'ownership_consent' => ['required', 'accepted'],
-      'research_title' => [
+    $relationship = $request->input('university_relationship');
+    $inventors = $request->input('inventors', []);
+    $inventorCount = is_array($inventors) ? count($inventors) : 0;
+    $natureOptions = [
+      'conception',
+      'identification_essential_element',
+      'technical_feature',
+      'experimental_refinement',
+      'reduction_to_practice',
+      'testing_validation',
+      'optimization',
+      'other_substantive',
+    ];
+    $rules = [
+      'lead_creator_name' => ['required', 'string', 'max:255'],
+      'college_department' => ['required', 'string', 'max:255'],
+      'campus' => ['required', 'string', 'max:255'],
+      'university_relationship' => ['required', Rule::in([
+        'faculty_academic',
+        'admin_staff',
+        'contractual_job_order',
+        'external_partner',
+        'student',
+        'alumni',
+        'other_specify',
+      ])],
+      'other_relationship' => [
         'nullable',
         'string',
-        'max:500',
-        Rule::requiredIf($ownershipDeclaration === 'not_applicable'),
-        Rule::prohibitedIf($ownershipDeclaration !== 'not_applicable'),
+        'max:255',
+        Rule::requiredIf($relationship === 'other_specify'),
+        Rule::prohibitedIf($relationship !== 'other_specify'),
       ],
-      'research_approval_date' => [
-        'nullable',
-        'date',
-        Rule::requiredIf($ownershipDeclaration === 'not_applicable'),
-        Rule::prohibitedIf($ownershipDeclaration !== 'not_applicable'),
-      ],
-      'background_summary' => ['required', 'string', 'min:100'],
-      'detailed_description' => ['required', 'string', 'min:100'],
-      'drawings_description' => ['nullable', 'string'],
+      'email' => ['required', 'email', 'max:255'],
+      'mobile_no' => ['required', 'string', 'max:20', 'regex:/^(09|\\+639)\d{9}$/'],
+      'research_title' => ['required', 'string', 'max:500'],
+      'funding_source' => ['required', 'string', 'max:500'],
+      'date_of_creation' => ['required', 'date'],
+      'research_approval_date' => ['required', 'date'],
+      'technology_type' => ['required', Rule::in(['mechanical_engineering', 'chemical'])],
+      'technologies' => ['required', 'array', 'min:1', 'max:2'],
+      'technologies.*.technology_title' => ['required', 'string', 'max:500'],
+      'file_drive_link' => ['nullable', 'url', 'max:2048'],
+      'ownership_declaration' => ['required', Rule::in([
+        'slsu_owned',
+        'assigned_to_slsu',
+        'creator_retained',
+      ])],
       'inventors' => ['required', 'array', 'min:1', 'max:20'],
       'inventors.*.last_name' => ['required', 'string', 'max:100'],
       'inventors.*.first_name' => ['required', 'string', 'max:100'],
+      'inventors.*.middle_initial' => ['nullable', 'string', 'max:1'],
       'inventors.*.suffix' => ['nullable', 'string', 'max:20'],
-      'inventors.*.middle_initial' => ['nullable', 'string', 'size:1'],
-      'inventors.*.country_of_citizenship' => ['required', Rule::in(config('countries'))],
-      'inventors.*.affiliation' => ['required', Rule::in([
-        'slsu_employee',
-        'external_inventor',
-        'student',
-        'faculty_adviser',
-        'external_collaborator',
-      ])],
-      'primary_inventor' => ['required', 'integer', Rule::in($inventorKeys)],
-      'attachments' => ['nullable', 'array'],
-      'attachments.drawings' => $this->attachmentRules(),
+      'inventors.*.email' => ['required', 'email', 'max:255'],
+      'inventors.*.position_affiliation' => ['required', 'string', 'max:500'],
+      'inventors.*.technical_contribution' => ['required', 'string'],
+      'inventors.*.contribution_percent' => ['required', 'numeric', 'decimal:0,2', 'between:0.01,100'],
+      'inventors.*.contribution_nature' => ['required', 'array', 'min:1'],
+      'inventors.*.contribution_nature.*' => ['required', Rule::in($natureOptions)],
+      'inventors.*.contribution_other' => [
+        'nullable',
+        'string',
+        'max:500',
+      ],
+      'inventors.*.signature_name' => ['required', 'string', 'max:255'],
+      'inventors.*.declaration_confirmed' => ['required', 'accepted'],
+      'inventors.*.declaration_date' => ['required', 'date'],
+      'materials' => ['required', 'array', 'min:1', 'max:100'],
+      'materials.*.item' => ['required', 'string', 'max:255'],
+      'materials.*.description' => ['required', 'string', 'max:2000'],
+      'materials.*.quantity' => ['required', 'numeric', 'gt:0', 'decimal:0,2'],
+      'materials.*.unit_cost' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
+      'materials.*.purpose' => ['nullable', 'string', 'max:2000'],
+      'attachments' => ['nullable', 'array:deed_assignment,additional_signed_sheet,sample_photo,drawings,methodology,assistance_form'],
+      'attachments.deed_assignment' => [
+        ...$this->attachmentRules(false),
+        Rule::requiredIf($ownershipDeclaration === 'assigned_to_slsu'),
+      ],
+      'attachments.additional_signed_sheet' => [
+        ...$this->attachmentRules(false),
+        Rule::requiredIf($inventorCount > 6),
+      ],
+      'attachments.sample_photo' => $this->attachmentRules(true),
+      'attachments.drawings' => $this->attachmentRules(false),
       'attachments.methodology' => $this->attachmentRules(),
       'attachments.assistance_form' => $this->attachmentRules(),
+    ];
+    foreach (self::TECHNOLOGY_NARRATIVES as $narrative) {
+      $rules["technologies.*.{$narrative}"] = ['nullable', 'string'];
+      $rules["technologies.*.files.{$narrative}"] = [
+        'nullable',
+        'file',
+        'mimes:pdf',
+        'max:15360',
+        function (string $attribute, mixed $file, \Closure $fail): void {
+          if ($file instanceof UploadedFile && mb_strlen($file->getClientOriginalName()) > 255) {
+            $fail('The uploaded file name may not exceed 255 characters.');
+          }
+        },
+      ];
+    }
+    $validated = $request->validate($rules, [
+      'attachments.*.mimes' => 'All uploaded files must be PDF documents.',
+      'technologies.*.files.*.mimes' => 'Narrative uploads must be PDF documents.',
+      'attachments.sample_photo.required' => 'Upload a PDF containing the product sample photo.',
+      'attachments.deed_assignment.required' => 'Upload the signed Deed of Assignment for an assignment to SLSU.',
+      'attachments.additional_signed_sheet.required' => 'For more than six creators, upload an additional signed creator sheet as a PDF.',
     ]);
 
-    $validated['has_substantial_support'] = $isSlsuEmployee
-      ? ($isSlsuFunded || $request->boolean('has_substantial_support'))
-      : null;
+    foreach ($validated['technologies'] as $technologyIndex => $technology) {
+      foreach (self::TECHNOLOGY_NARRATIVES as $narrative) {
+        $text = trim((string) ($technology[$narrative] ?? ''));
+        $file = $technology['files'][$narrative] ?? null;
+        if ($text === '' && ! $file instanceof UploadedFile) {
+          return back()
+            ->withErrors(["technologies.{$technologyIndex}.{$narrative}" => 'Enter this narrative or upload its PDF.'])
+            ->withInput();
+        }
+      }
+    }
+
+    $contributionTotal = round(array_sum(array_map(
+      static fn (array $inventor): float => (float) $inventor['contribution_percent'],
+      $validated['inventors']
+    )), 2);
+    if ($contributionTotal !== 100.0) {
+      return back()
+        ->withErrors(['inventors' => 'Declared creator contributions must add up to exactly 100%.'])
+        ->withInput();
+    }
+
+    foreach ($validated['inventors'] as $index => $inventor) {
+      if (in_array('other_substantive', $inventor['contribution_nature'], true)
+        && blank($inventor['contribution_other'] ?? null)) {
+        return back()
+          ->withErrors(["inventors.{$index}.contribution_other" => 'Specify the other substantive contribution.'])
+          ->withInput();
+      }
+      if (! in_array('other_substantive', $inventor['contribution_nature'], true)
+        && filled($inventor['contribution_other'] ?? null)) {
+        return back()
+          ->withErrors(["inventors.{$index}.contribution_other" => 'This field is only used for other substantive contributions.'])
+          ->withInput();
+      }
+    }
+
+    $lineTotals = [];
+    foreach ($validated['materials'] as $index => $material) {
+      $lineTotal = round((float) $material['quantity'] * (float) $material['unit_cost'], 2);
+      if (! is_finite($lineTotal) || $lineTotal > 9999999999.99) {
+        return back()
+          ->withErrors(["materials.{$index}.unit_cost" => 'The calculated item total may not exceed ₱9,999,999,999.99.'])
+          ->withInput();
+      }
+      $lineTotals[] = $lineTotal;
+    }
+    $totalDevelopmentCost = round(array_sum($lineTotals), 2);
+    if (! is_finite($totalDevelopmentCost) || $totalDevelopmentCost > 9999999999.99) {
+      return back()
+        ->withErrors(['materials' => 'The total estimated development cost may not exceed ₱9,999,999,999.99.'])
+        ->withInput();
+    }
 
     $storageDirectory = null;
 
     try {
-      DB::transaction(function () use ($request, $validated, &$storageDirectory): void {
-        $disclosure = $request->user()->innovationDisclosures()->create(
-          Arr::except($validated, ['inventors', 'primary_inventor', 'attachments'])
-        );
+      DB::transaction(function () use ($request, $validated, $lineTotals, $totalDevelopmentCost, &$storageDirectory): void {
+        $materials = $validated['materials'];
+        $attachments = $validated['attachments'] ?? [];
+        $inventorRows = $validated['inventors'];
+        $technologies = $validated['technologies'];
+        $primaryTechnology = $technologies[0];
+        $legacyNarratives = [];
+        foreach (self::TECHNOLOGY_NARRATIVES as $field) {
+          $legacyNarratives[$field] = $primaryTechnology[$field] ?? '';
+        }
+
+        $disclosure = $request->user()->innovationDisclosures()->create([
+          ...Arr::except($validated, [
+            'inventors',
+            'materials',
+            'attachments',
+            'other_relationship',
+            'technologies',
+          ]),
+          'other_relationship' => $validated['other_relationship'] ?? null,
+          'disclosure_date' => now()->toDateString(),
+          'total_development_cost' => $totalDevelopmentCost,
+          'technology_title' => $primaryTechnology['technology_title'],
+          ...$legacyNarratives,
+          'research_title' => $validated['research_title'],
+          'ownership_consent' => true,
+          'has_substantial_support' => null,
+        ]);
         $storageDirectory = "innovation-disclosures/{$disclosure->id}";
 
-        foreach ($validated['inventors'] as $index => $inventorData) {
+        foreach ($technologies as $technologyData) {
+          $technology = $disclosure->technologies()->create([
+            'technology_title' => $technologyData['technology_title'],
+            ...array_intersect_key($technologyData, array_flip(self::TECHNOLOGY_NARRATIVES)),
+          ]);
+          foreach (self::TECHNOLOGY_NARRATIVES as $narrative) {
+            $file = $technologyData['files'][$narrative] ?? null;
+            if (! $file instanceof UploadedFile) {
+              continue;
+            }
+            $storedPath = $file->store("{$storageDirectory}/technologies/{$technology->id}/{$narrative}", 'local');
+            if (! is_string($storedPath)) {
+              throw new \RuntimeException('The technology narrative PDF could not be stored.');
+            }
+            $technology->files()->create([
+              'narrative_key' => $narrative,
+              'original_name' => $file->getClientOriginalName(),
+              'stored_path' => $storedPath,
+              'mime_type' => 'application/pdf',
+              'size_bytes' => $file->getSize(),
+            ]);
+          }
+        }
+
+        foreach ($inventorRows as $index => $inventorData) {
+          $fullName = $inventorData['last_name'] . ', ' . trim(implode(' ', array_filter([
+            $inventorData['first_name'],
+            filled($inventorData['middle_initial'] ?? null) ? strtoupper(trim($inventorData['middle_initial'])) . '.' : null,
+            $inventorData['suffix'] ?? null,
+          ])));
           $disclosure->inventors()->create([
             ...$inventorData,
-            'is_primary' => (string) $index === (string) $validated['primary_inventor'],
+            'full_name' => $fullName,
+            'affiliation' => $inventorData['position_affiliation'],
+            'country_of_citizenship' => null,
+            'is_primary' => $index === array_key_first($inventorRows),
           ]);
         }
 
-        foreach ($validated['attachments'] ?? [] as $type => $file) {
+        foreach ($materials as $index => $material) {
+          $disclosure->costItems()->create([
+            ...$material,
+            'total_cost' => $lineTotals[$index],
+          ]);
+        }
+
+        foreach ($attachments as $type => $file) {
           if (! $file instanceof UploadedFile) {
             continue;
           }
@@ -286,7 +562,7 @@ class InnovationDisclosureController extends Controller
     return [
       $required ? 'required' : 'nullable',
       'file',
-      'mimes:pdf,doc,docx,jpg,jpeg,png',
+      'mimes:pdf',
       'max:15360',
       function (string $attribute, mixed $file, \Closure $fail): void {
         if ($file instanceof UploadedFile && mb_strlen($file->getClientOriginalName()) > 255) {

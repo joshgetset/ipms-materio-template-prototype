@@ -61,35 +61,42 @@ $container = ($container ?? 'container-xxl');
                         @endif
 
                         @php
+                        $homeRoute = auth()->user()?->is_evaluator
+                        ? route('evaluator-dashboard.index')
+                        : route('dashboard-analytics');
                         $breadcrumbs = match (request()->route()?->getName()) {
                         'dashboard-analytics' => [
-                        ['label' => 'Home', 'url' => route('dashboard-analytics')],
+                        ['label' => 'Home', 'url' => $homeRoute],
                         ['label' => 'Dashboard'],
                         ],
-                        'admin-dashboard.index' => [
-                        ['label' => 'Home', 'url' => route('dashboard-analytics')],
-                        ['label' => 'Admin Dashboard'],
+                        'evaluator-dashboard.index' => [
+                        ['label' => 'Home', 'url' => $homeRoute],
+                        ['label' => 'Evaluator Dashboard'],
                         ],
-                        'admin-dashboard.disclosures.show' => [
-                        ['label' => 'Home', 'url' => route('dashboard-analytics')],
-                        ['label' => 'Admin Dashboard', 'url' => route('admin-dashboard.index')],
+                        'evaluator-dashboard.submissions' => [
+                        ['label' => 'Home', 'url' => $homeRoute],
+                        ['label' => 'Innovation Submission'],
+                        ],
+                        'evaluator-dashboard.disclosures.show' => [
+                        ['label' => 'Home', 'url' => $homeRoute],
+                        ['label' => 'Innovation Submission', 'url' => route('evaluator-dashboard.submissions')],
                         ['label' => 'Review Submission'],
                         ],
                         'dashboard.innovation-disclosure.create' => [
-                        ['label' => 'Home', 'url' => route('dashboard-analytics')],
+                        ['label' => 'Home', 'url' => $homeRoute],
                         ['label' => 'Innovation Disclosure'],
                         ],
                         'dashboard.submissions.index' => [
-                        ['label' => 'Home', 'url' => route('dashboard-analytics')],
+                        ['label' => 'Home', 'url' => $homeRoute],
                         ['label' => 'Submissions'],
                         ],
                         'dashboard.submissions.show' => [
-                        ['label' => 'Home', 'url' => route('dashboard-analytics')],
+                        ['label' => 'Home', 'url' => $homeRoute],
                         ['label' => 'Submissions', 'url' => route('dashboard.submissions.index')],
                         ['label' => 'Review Submission'],
                         ],
                         default => [
-                        ['label' => 'Home', 'url' => route('dashboard-analytics')],
+                        ['label' => 'Home', 'url' => $homeRoute],
                         ['label' => trim($__env->yieldContent('title', 'Page')) ?: 'Page'],
                         ],
                         };

@@ -1,7 +1,7 @@
 @php
 use Illuminate\Support\Facades\Route;
 @endphp
-<aside id="layout-menu" class="layout-menu menu-vertical menu shadow-lg">
+<aside id="layout-menu" class="layout-menu menu-vertical menu shadow-sm">
 
     <!-- ! Hide app brand if navbar-full -->
     <div class="app-brand demo">
@@ -17,7 +17,10 @@ use Illuminate\Support\Facades\Route;
     <ul class="menu-inner py-1">
         @foreach ($menuData[0]->menu as $menu)
 
-        @if (!empty($menu->adminOnly) && !auth()->user()?->is_admin)
+        @if (!empty($menu->evaluatorOnly) && !auth()->user()?->is_evaluator)
+        @continue
+        @endif
+        @if (!empty($menu->submitterOnly) && auth()->user()?->is_evaluator)
         @continue
         @endif
 
@@ -37,6 +40,14 @@ use Illuminate\Support\Facades\Route;
 
         if ($currentRouteName === $menu->slug) {
         $activeClass = 'active';
+        }
+        elseif (is_array($menu->slug)) {
+        foreach ($menu->slug as $slug) {
+        if ($currentRouteName === $slug || str_starts_with($currentRouteName, $slug . '.')) {
+        $activeClass = 'active';
+        break;
+        }
+        }
         }
         elseif (isset($menu->submenu)) {
         if (gettype($menu->slug) === 'array') {

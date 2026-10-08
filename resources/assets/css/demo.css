@@ -3,6 +3,54 @@
 * File include item demo only specific css only
 ******************************************************************************/
 
+.swal2-container {
+  z-index: 1100 !important;
+}
+
+.modal .modal-header {
+  display: flex;
+  align-items: center !important;
+  min-height: 3.5rem;
+  padding: 0.75rem 1.5rem;
+  color: #fff;
+  background-color: var(--bs-primary) !important;
+  border-bottom-color: var(--bs-primary);
+}
+
+.modal .modal-header .modal-title {
+  margin-block: 0;
+  color: #fff !important;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.modal .modal-header .btn-close {
+  flex: 0 0 auto;
+  margin: 0 0 0 auto;
+  filter: invert(1) grayscale(100%) brightness(200%);
+  opacity: 0.9;
+}
+
+.table > tbody > tr > td,
+.table > tbody > tr > th {
+  color: #384551;
+}
+
+.table > thead > tr > th {
+  color: var(--bs-heading-color, #384551);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.form-label,
+.col-form-label {
+  color: #384551;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
 .menu .app-brand.demo {
   height: 64px;
 }
@@ -39,12 +87,20 @@
 .layout-navbar-fixed .layout-navbar.navbar-detached.navbar-docked {
   top: 0;
   margin-top: 0 !important;
-  border-radius: 0 0 0.75rem 0.75rem !important;
-  box-shadow: 0 8px 24px rgba(16, 40, 115, 0.12);
+  border-radius: 0 !important;
+  box-shadow: 0 8px 10px -8px rgba(16, 40, 115, 0.42) !important;
   margin-inline: 0 !important;
   inset-inline-start: var(--navbar-dock-start, 0px);
   inline-size: calc(100% - var(--navbar-dock-start, 0px)) !important;
   max-inline-size: none !important;
+}
+
+.layout-wrapper.navbar-is-docked #layout-menu {
+  box-shadow: none !important;
+}
+
+#layout-menu {
+  box-shadow: 0 0.125rem 0.5rem rgba(67, 89, 113, 0.12) !important;
 }
 
 .layout-navbar-fixed .layout-navbar.navbar-detached.navbar-docked > .navbar-nav-right {
@@ -66,9 +122,84 @@
   margin-block: 1rem;
 }
 
-.admin-submissions-table {
-  min-width: 960px;
+.submission-section-divider {
+  border: 0;
+  border-top: 3px solid #495057;
+  margin-block: 2.25rem;
+  opacity: 1;
+}
+
+.evaluator-submissions-table {
+  min-width: 1120px;
   table-layout: fixed;
+}
+
+.evaluator-submissions-table thead th {
+  white-space: nowrap;
+}
+
+.evaluator-submissions-table td {
+  white-space: nowrap;
+}
+
+.evaluator-submissions-table .submission-table__single-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.evaluator-submissions-table .submission-table__type {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.evaluator-submissions-table .submission-table__created-at span {
+  display: block;
+}
+
+.evaluator-submissions-table__title {
+  display: -webkit-box;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.evaluator-submissions-table .submission-table__email {
+  white-space: normal;
+  overflow-wrap: normal;
+}
+
+.evaluator-submissions-table .submission-table__email span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.submission-metadata .form-control:disabled {
+  color: var(--bs-body-color);
+  opacity: 1;
+  -webkit-text-fill-color: var(--bs-body-color);
+  background-color: var(--bs-body-bg);
+}
+
+.attachment-preview-frame {
+  display: block;
+  width: 100%;
+  height: 72vh;
+  min-height: 320px;
+  max-height: 800px;
+  border: 0;
+  background: #fff;
 }
 
 @media (min-width: 1200px) {
@@ -80,6 +211,85 @@
 /* Navbar page z-index issue solution */
 .content-wrapper .navbar {
   z-index: auto;
+}
+
+.evaluator-file-card,
+.user-submission-file-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.evaluator-file-card__type,
+.user-submission-file-card__type {
+  min-height: 0;
+  color: var(--bs-primary);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.inventor-table thead th {
+  color: #fff;
+  background-color: var(--bs-primary) !important;
+  border-color: var(--bs-primary);
+}
+
+.evaluator-file-card__name,
+.user-submission-file-card__name {
+  display: -webkit-box;
+  min-width: 0;
+  max-height: 3rem;
+  color: var(--bs-body-color);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.5rem;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.evaluator-file-card__meta,
+.user-submission-file-card__meta {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.user-submission-file-card--revision-requested {
+  border: 2px solid var(--bs-warning) !important;
+}
+
+.user-submission-file-card--revised,
+.evaluator-file-card--revised {
+  border: 2px solid #8ac7f5 !important;
+}
+
+.flat-icon-button {
+  width: auto;
+  height: auto;
+  color: var(--bs-primary) !important;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  line-height: 1;
+  font-size: 1.25rem;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.flat-icon-button i {
+  font-size: 1.375rem;
+}
+
+.flat-icon-button:hover {
+  color: var(--bs-primary) !important;
+  transform: scale(1.12);
+}
+
+.flat-icon-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 /*

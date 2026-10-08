@@ -47,8 +47,8 @@ use App\Http\Controllers\tables\Basic as TablesBasic;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\PatentController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\EvaluatorDashboardController;
 use App\Http\Controllers\InnovationDisclosureController;
-use App\Http\Controllers\AdminDashboardController;
 
 /*
 |--------------------------------------------------------------------------
@@ -81,15 +81,34 @@ Route::post('/signin', [AuthController::class, 'signin'])
 */
 
 Route::middleware('auth')->group(function () {
-    Route::get('/admin_dashboard', [AdminDashboardController::class, 'index'])
-        ->name('admin-dashboard.index');
-    Route::get('/admin_dashboard/disclosures/{disclosure}', [AdminDashboardController::class, 'showReview'])
+    Route::get('/evaluator_dashboard', [EvaluatorDashboardController::class, 'index'])
+        ->name('evaluator-dashboard.index');
+    Route::get('/evaluator_dashboard/submissions', [EvaluatorDashboardController::class, 'submissions'])
+        ->name('evaluator-dashboard.submissions');
+    Route::get('/evaluator_dashboard/disclosures/{disclosure}', [EvaluatorDashboardController::class, 'showReview'])
         ->whereNumber('disclosure')
-        ->name('admin-dashboard.disclosures.show');
-    Route::post('/admin_dashboard/disclosures/{disclosure}/review', [AdminDashboardController::class, 'updateReview'])
-        ->name('admin-dashboard.review');
-    Route::post('/admin_dashboard/attachments/{attachment}/review', [AdminDashboardController::class, 'updateAttachmentReview'])
-        ->name('admin-dashboard.attachments.review');
+        ->name('evaluator-dashboard.disclosures.show');
+    Route::get('/evaluator_dashboard/disclosures/{disclosure}/xml', [EvaluatorDashboardController::class, 'exportAsXml'])
+        ->whereNumber('disclosure')
+        ->name('evaluator-dashboard.disclosures.xml');
+    Route::post('/evaluator_dashboard/disclosures/{disclosure}/attachments/review', [EvaluatorDashboardController::class, 'updateDisclosureAttachmentReviews'])
+        ->whereNumber('disclosure')
+        ->name('evaluator-dashboard.disclosures.attachments.review');
+    Route::post('/evaluator_dashboard/disclosures/{disclosure}/review', [EvaluatorDashboardController::class, 'updateReview'])
+        ->whereNumber('disclosure')
+        ->name('evaluator-dashboard.review');
+    Route::post('/evaluator_dashboard/attachments/{attachment}/review', [EvaluatorDashboardController::class, 'updateAttachmentReview'])
+        ->whereNumber('attachment')
+        ->name('evaluator-dashboard.attachments.review');
+    Route::get('/evaluator_dashboard/disclosures/{disclosure}/attachments/{attachment}/preview', [EvaluatorDashboardController::class, 'previewAttachment'])
+        ->whereNumber('disclosure')
+        ->whereNumber('attachment')
+        ->name('evaluator-dashboard.attachments.preview');
+    Route::get('/evaluator_dashboard/disclosures/{disclosure}/technology-files/{file}/preview', [InnovationDisclosureController::class, 'previewTechnologyFile'])
+        ->whereNumber('disclosure')
+        ->whereNumber('file')
+        ->name('evaluator-dashboard.technology-files.preview');
+
     Route::get('/dashboard', [InnovationDisclosureController::class, 'index'])
         ->name('dashboard-analytics');
     Route::get('/dashboard/innovation-disclosure', [InnovationDisclosureController::class, 'create'])
@@ -98,11 +117,19 @@ Route::middleware('auth')->group(function () {
         ->name('dashboard.innovation-disclosures.store');
     Route::get('/dashboard/submissions', [InnovationDisclosureController::class, 'submissions'])
         ->name('dashboard.submissions.index');
+    Route::get('/dashboard/submissions/status-updates', [InnovationDisclosureController::class, 'submissionStatusUpdates'])
+        ->name('dashboard.submissions.status-updates');
     Route::get('/dashboard/submissions/{disclosure}', [InnovationDisclosureController::class, 'showSubmission'])
         ->whereNumber('disclosure')
         ->name('dashboard.submissions.show');
-    Route::get('/dashboard/submissions/status-updates', [InnovationDisclosureController::class, 'submissionStatusUpdates'])
-        ->name('dashboard.submissions.status-updates');
+    Route::get('/dashboard/submissions/{disclosure}/attachments/{attachment}/preview', [InnovationDisclosureController::class, 'previewAttachment'])
+        ->whereNumber('disclosure')
+        ->whereNumber('attachment')
+        ->name('dashboard.submissions.attachments.preview');
+    Route::get('/dashboard/submissions/{disclosure}/technology-files/{file}/preview', [InnovationDisclosureController::class, 'previewTechnologyFile'])
+        ->whereNumber('disclosure')
+        ->whereNumber('file')
+        ->name('dashboard.submissions.technology-files.preview');
     Route::post('/dashboard/submissions/{disclosure}/attachments', [InnovationDisclosureController::class, 'storeAttachment'])
         ->name('dashboard.submissions.attachments.store');
     Route::delete('/dashboard/submissions/{disclosure}', [InnovationDisclosureController::class, 'destroy'])

@@ -46,6 +46,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   const navbar = document.querySelector('.layout-navbar.navbar-detached');
   if (navbar) {
+    const layoutWrapper = navbar.closest('.layout-wrapper');
     const initialMarginTop = Number.parseFloat(window.getComputedStyle(navbar).marginTop) || 0;
     const dockThreshold = navbar.offsetHeight + initialMarginTop;
     const captureDockBounds = () => {
@@ -65,6 +66,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const shouldDock = window.scrollY > dockThreshold;
       if (shouldDock && !navbar.classList.contains('navbar-docked')) captureDockBounds();
       navbar.classList.toggle('navbar-docked', shouldDock);
+      layoutWrapper?.classList.toggle('navbar-is-docked', shouldDock);
     };
 
     window.addEventListener('scroll', updateDockState, { passive: true });
