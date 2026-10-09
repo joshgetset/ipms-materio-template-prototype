@@ -1,8 +1,8 @@
 {
   "menu": [
     {
-      "menuHeader": "Evaluator",
-      "evaluatorOnly": true
+      "menuHeader": "IP Head",
+      "ipHeadOnly": true
     },
     {
       "menuHeader": "Inventors",
@@ -33,23 +33,23 @@
       ]
     },
     {
-      "url": "/evaluator_dashboard",
-      "name": "Evaluator Dashboard",
+      "url": "/ip_head",
+      "name": "IP Head Dashboard",
       "icon": "menu-icon icon-base ri ri-shield-user-line",
-      "slug": "evaluator-dashboard",
-      "evaluatorOnly": true,
+      "slug": "ip-head-dashboard",
+      "ipHeadOnly": true,
       "submenu": [
         {
-          "url": "/evaluator_dashboard",
+          "url": "/ip_head",
           "name": "Overview",
-          "slug": "evaluator-dashboard.index"
+          "slug": "ip-head-dashboard.index"
         },
         {
-          "url": "/evaluator_dashboard/submissions",
+          "url": "/ip_head/submissions",
           "name": "Innovation Submission",
           "slug": [
-            "evaluator-dashboard.submissions",
-            "evaluator-dashboard.disclosures"
+            "ip-head-dashboard.submissions",
+            "ip-head-dashboard.disclosures"
           ]
         }
       ]

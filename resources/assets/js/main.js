@@ -7,6 +7,40 @@
 import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
 
+window.Swal = Swal;
+
+const originalSwalFire = Swal.fire.bind(Swal);
+const sentenceSegmenter = typeof Intl.Segmenter === 'function'
+  ? new Intl.Segmenter(undefined, { granularity: 'sentence' })
+  : null;
+
+Swal.fire = (options, ...args) => {
+  if (options && typeof options === 'object' && typeof options.text === 'string') {
+    const text = options.text.trim();
+    const sentences = sentenceSegmenter
+      ? Array.from(sentenceSegmenter.segment(text), segment => segment.segment.trim())
+      : text.match(/[^.!?]+[.!?]*(?:\s+|$)/g)?.map(sentence => sentence.trim()) ?? [text];
+    let message = sentences.slice(0, 2).join(' ');
+
+    if (sentences.length > 2) {
+      message += '…';
+    }
+
+    const messageCharacters = Array.from(message);
+    if (messageCharacters.length > 120) {
+      const shortenedMessage = messageCharacters.slice(0, 117).join('');
+      const lastWordBoundary = shortenedMessage.lastIndexOf(' ');
+      message = `${shortenedMessage.slice(0, lastWordBoundary > 80 ? lastWordBoundary : 117).trimEnd()}…`;
+    }
+
+    if (message !== text) {
+      options = { ...options, text: message };
+    }
+  }
+
+  return originalSwalFire(options, ...args);
+};
+
 let menu, animate;
 document.addEventListener('DOMContentLoaded', function () {
   // class for ios specific styles

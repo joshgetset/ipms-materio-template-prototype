@@ -17,10 +17,10 @@ use Illuminate\Support\Facades\Route;
     <ul class="menu-inner py-1">
         @foreach ($menuData[0]->menu as $menu)
 
-        @if (!empty($menu->evaluatorOnly) && !auth()->user()?->is_evaluator)
+        @if (!empty($menu->ipHeadOnly) && !auth()->user()?->is_ip_head)
         @continue
         @endif
-        @if (!empty($menu->submitterOnly) && auth()->user()?->is_evaluator)
+        @if (!empty($menu->submitterOnly) && auth()->user()?->is_ip_head)
         @continue
         @endif
 

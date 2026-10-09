@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DisclosureAttachment extends Model
 {
@@ -33,5 +34,10 @@ class DisclosureAttachment extends Model
   public function innovationDisclosure(): BelongsTo
   {
     return $this->belongsTo(InnovationDisclosure::class);
+  }
+
+  public function events(): HasMany
+  {
+    return $this->hasMany(DisclosureAttachmentEvent::class);
   }
 }

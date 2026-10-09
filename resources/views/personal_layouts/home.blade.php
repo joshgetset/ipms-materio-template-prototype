@@ -13,10 +13,10 @@
     rel="stylesheet">
 
 @vite('resources/assets/vendor/fonts/iconify/iconify.css')
-<link rel="stylesheet" href="{{ asset('css/home/home.css') }}">
-<link rel="stylesheet" href="{{ asset('css/home/navbar.css') }}">
-<link rel="stylesheet" href="{{ asset('css/home/hero_carousel.css') }}">
-<link rel="stylesheet" href="{{ asset('css/home/home_sections.css') }}">
+<link rel="stylesheet" href="{{ asset('home/css/home.css') }}">
+<link rel="stylesheet" href="{{ asset('home/css/navbar.css') }}">
+<link rel="stylesheet" href="{{ asset('home/css/hero_carousel.css') }}">
+<link rel="stylesheet" href="{{ asset('home/css/home_sections.css') }}">
 @endpush
 
 @section('content')
@@ -31,15 +31,14 @@
     @include('personal_partials.home.cta')
 </main>
 
-@include('personal_partials.home.patent-modals')
 @include('personal_partials.home.footer')
 
 @endsection
 
 @push('scripts')
-<script src="{{ asset('js/home/navbar.js') }}" defer></script>
-<script src="{{ asset('js/home/home.js') }}" defer></script>
-<script src="{{ asset('js/home/carousel.js') }}" defer></script>
-<script src="{{ asset('js/home/side-nav.js') }}" defer></script>
-<script src="{{ asset('js/login.js') }}" defer></script>
+<script src="{{ asset('home/js/navbar.js') }}" defer></script>
+<script src="{{ asset('home/js/home.js') }}" defer></script>
+<script src="{{ asset('home/js/carousel.js') }}" defer></script>
+<script src="{{ asset('home/js/side-nav.js') }}" defer></script>
+<script src="{{ asset('auth/js/login.js') }}" defer></script>
 @endpush

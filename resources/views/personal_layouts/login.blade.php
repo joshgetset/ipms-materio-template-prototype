@@ -12,8 +12,8 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
     rel="stylesheet">
 
-<link rel="stylesheet" href="{{ asset('css/login.css') }}">
-<link rel="stylesheet" href="{{ asset('css/auth_animation.css') }}">
+<link rel="stylesheet" href="{{ asset('auth/css/login.css') }}">
+<link rel="stylesheet" href="{{ asset('auth/css/auth_animation.css') }}">
 @endpush
 
 @section('content')
@@ -482,5 +482,5 @@ $showSignup = $cameFromSignup
 @endsection
 
 @push('scripts')
-<script src="{{ asset('js/login.js') }}" defer></script>
+<script src="{{ asset('auth/js/login.js') }}" defer></script>
 @endpush

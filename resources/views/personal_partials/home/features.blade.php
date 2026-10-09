@@ -96,7 +96,7 @@
 
                 <ul class="feature-points">
                     <li>Single point of entry</li>
-                    <li>Integrated patent search</li>
+                    <li>Shared access for your team</li>
                     <li>Consistent access for your team</li>
                 </ul>
 

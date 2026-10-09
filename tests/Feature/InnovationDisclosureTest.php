@@ -41,7 +41,8 @@ class InnovationDisclosureTest extends TestCase
       ->get('/dashboard')
       ->assertOk()
       ->assertSee('<span class="menu-header-text">Inventors</span>', false)
-      ->assertDontSee('Evaluator</span>')
+      ->assertDontSee('IP Head</span>')
+      ->assertSee('dashboard-wide-container', false)
       ->assertSee('Dashboard analytics')
       ->assertSee('Disclosure status')
       ->assertDontSee('name="technology_type"', false)
@@ -59,11 +60,39 @@ class InnovationDisclosureTest extends TestCase
     $this->actingAs($user)
       ->get(route('dashboard.innovation-disclosure.create'))
       ->assertOk()
+      ->assertSee('dashboard-wide-container', false)
       ->assertSee('Innovation Disclosure')
       ->assertSee('Creator Information')
       ->assertSee('Creators and Contributions')
       ->assertSee('id="add-technology"', false)
       ->assertSee('id="technology-modal"', false)
+      ->assertSee('id="save-idf-submission"', false)
+      ->assertSee('Save submission')
+      ->assertSee('id="import-idf-button"', false)
+      ->assertSee('Import IDF')
+      ->assertSee('sessionStorage.getItem(idfSubmissionRecoveryKey)', false)
+      ->assertSee('window.saveIdfDraftBeforeSubmit', false)
+      ->assertSee('window.markIdfSubmissionPending', false)
+      ->assertSee('clearDraftRecord();', false)
+      ->assertSee('technologies[${index}][technology_title]', false)
+      ->assertSee('window.showSaveFilePicker', false)
+      ->assertSee("materials.push(material)", false)
+      ->assertDontSee("CustomEvent('material:save-requested'", false)
+      ->assertSee("format: 'ipms-idf-draft'", false)
+      ->assertSee('id="technology-narrative-view-modal"', false)
+      ->assertSee('id="technology-narrative-view-content"', false)
+      ->assertSee("['view', 'View', 'ri-eye-line']", false)
+      ->assertDontSee("viewButton.dataset.technologyAction = 'view'", false)
+      ->assertSee('ri-checkbox-circle-fill', false)
+      ->assertSee("accordion accordion-flush border rounded mb-3", false)
+      ->assertSee("'PDF DOCUMENT'", false)
+      ->assertSee('ri-file-pdf-2-line', false)
+      ->assertSee('Narrative already exists')
+      ->assertSee("confirmButtonText: 'Proceed'", false)
+      ->assertSee("cancelButtonText: 'Cancel'", false)
+      ->assertSee("title: 'Remove this PDF?'", false)
+      ->assertSee("confirmButtonText: 'Yes, remove PDF'", false)
+      ->assertSee('technology-remove-file', false)
       ->assertSee('data-technology-file="abstract_summary"', false)
       ->assertSee('id="creator-modal"', false)
       ->assertSee('id="creator-view-modal"', false)
@@ -107,13 +136,17 @@ class InnovationDisclosureTest extends TestCase
       ->assertOk()
       ->assertSee('My Submission')
       ->assertSee('Low-cost water filtration device')
-      ->assertSee('class="table table-hover align-middle mb-0 evaluator-submissions-table"', false)
-      ->assertSee('evaluator-submissions-table__title', false)
+      ->assertSee('class="table table-hover align-middle mb-0 inventor-submissions-table"', false)
+      ->assertSee('submission-action-trigger', false)
+      ->assertSee('>View', false)
+      ->assertSee(route('dashboard.submissions.show', $disclosure), false)
+      ->assertSee('inventor-submissions-table__title', false)
       ->assertSee($disclosure->technology_title)
       ->assertSee('Mechanical')
+      ->assertSee('<th>Department</th>', false)
+      ->assertSee($disclosure->college_department)
       ->assertSee('class="submission-table__single-line"', false)
-      ->assertSee('class="submission-table__email"', false)
-      ->assertSee(explode('@', $user->email, 2)[0])
+      ->assertDontSee('<th>Submitter</th>', false)
       ->assertDontSee('data-disclosure-review-note', false)
       ->assertDontSee('Revision requested:</strong>', false);
 
@@ -129,6 +162,44 @@ class InnovationDisclosureTest extends TestCase
       'username' => fake()->unique()->userName(),
     ]);
     $disclosure = $this->makeDisclosure($user);
+    $disclosure->update(['research_title' => 'Community Water Research Program']);
+    $technology = $disclosure->technologies()->create([
+      'technology_title' => 'Community water filter',
+      'abstract_summary' => 'A compact filter for community water systems.',
+      'detailed_description' => 'A detailed implementation using layered filter media.',
+    ]);
+    $narrativePath = "innovation-disclosures/{$disclosure->id}/technologies/{$technology->id}/detailed_description/details.pdf";
+    Storage::disk('local')->put($narrativePath, '%PDF-1.4 technology narrative');
+    $narrativeFile = $technology->files()->create([
+      'narrative_key' => 'detailed_description',
+      'original_name' => 'details.pdf',
+      'stored_path' => $narrativePath,
+      'mime_type' => 'application/pdf',
+      'size_bytes' => 29,
+    ]);
+    $disclosure->inventors()->create([
+      'first_name' => 'Juan',
+      'last_name' => 'Dela Cruz',
+      'email' => $user->email,
+      'country_of_citizenship' => 'Philippines',
+      'affiliation' => 'student',
+      'position_affiliation' => 'Student researcher',
+      'technical_contribution' => 'Designed and tested the filter.',
+      'contribution_percent' => '100.00',
+      'contribution_nature' => ['conception'],
+      'signature_name' => 'Juan Dela Cruz',
+      'declaration_confirmed' => true,
+      'declaration_date' => now()->toDateString(),
+      'is_primary' => true,
+    ]);
+    $disclosure->costItems()->create([
+      'item' => 'Filter media',
+      'description' => 'Replacement filter media',
+      'quantity' => '2.00',
+      'unit_cost' => '150.00',
+      'total_cost' => '300.00',
+      'purpose' => 'Prototype testing',
+    ]);
     $path = "innovation-disclosures/{$disclosure->id}/methodology/methodology.pdf";
     Storage::disk('local')->put($path, '%PDF-1.4 preview fixture');
     $attachment = $disclosure->attachments()->create([
@@ -138,18 +209,292 @@ class InnovationDisclosureTest extends TestCase
       'mime_type' => 'application/pdf',
       'size_bytes' => 24,
     ]);
+    $attachment->events()->create([
+      'event_type' => 'uploaded',
+      'version' => 1,
+      'original_name' => 'methodology.pdf',
+      'occurred_at' => now()->subDays(2),
+    ]);
+    $attachment->events()->create([
+      'event_type' => 'revision_requested',
+      'version' => 1,
+      'original_name' => 'methodology.pdf',
+      'revision_notes' => 'Please provide a signed copy.',
+      'occurred_at' => now()->subDay(),
+    ]);
 
     $this->actingAs($user)
       ->get(route('dashboard.submissions.show', $disclosure))
       ->assertOk()
       ->assertSee('Submission Review')
-      ->assertSee($disclosure->technology_title)
+      ->assertDontSee('Technology title')
+      ->assertDontSee('submission-review-nav', false)
+      ->assertDontSee('id="submission-overview-title"', false)
+      ->assertSee('Submission overview')
+      ->assertSee('Technical / creative descriptions')
+      ->assertSee('Creators and contributions')
+      ->assertSee('Costing of materials and resources')
+      ->assertSee('id="submission-review-title">Community Water Research Program</h3>', false)
+      ->assertSee('<section class="submission-review-overview submission-review-section mb-4" id="submission-overview"', false)
+      ->assertDontSee('<article class="card mb-4 submission-review-section" id="submission-overview"', false)
+      ->assertSee('data-review-date="creation"', false)
+      ->assertSee('data-review-date="approval"', false)
+      ->assertSee('data-review-date="disclosure"', false)
+      ->assertDontSee('submission-review-group-stack', false)
+      ->assertSee('class="submission-review-stepper"', false)
+      ->assertSee('id="submission-timeline-title">Timeline</h5>', false)
+      ->assertDontSee('data-timeline-step="created"', false)
+      ->assertSee('Detailed timeline')
+      ->assertSee('submission-detailed-timeline-' . $disclosure->id, false)
+      ->assertSee('class="submission-review-group submission-review-timeline"', false)
+      ->assertSee('submission-review-important-dates', false)
+      ->assertSee('submission-review-date-stack', false)
+      ->assertSee('Research Approved')
+      ->assertSee('IDF Submitted')
+      ->assertSee('data-timeline-step="review"', false)
+      ->assertSee('data-timeline-step="approved"', false)
+      ->assertSee('IDF Applied to IPOPHL')
+      ->assertSee('data-review-date="creation"', false)
+      ->assertSee('class="table table-hover align-middle technology-table mb-0"', false)
+      ->assertSee('class="table table-hover align-middle inventors-table mb-0"', false)
+      ->assertSee('materials-table submission-review-costing-table', false)
+      ->assertSee('data-review-section="technologies"', false)
+      ->assertSee('data-review-section="costing"', false)
+      ->assertSee('Community water filter')
+      ->assertSee('Technology Title')
+      ->assertSee('>Action</th>', false)
+      ->assertSee('submission-technology-view-' . $disclosure->id . '-' . $technology->id, false)
+      ->assertSee('A compact filter for community water systems.')
+      ->assertSee('aria-label="View Detailed Description PDF:', false)
+      ->assertSee(route('dashboard.submissions.technology-files.preview', [$disclosure, $narrativeFile]), false)
+      ->assertSee('submission-creator-view-' . $disclosure->id, false)
+      ->assertSee('Juan Dela Cruz')
+      ->assertSee('Declared Contribution')
+      ->assertSee('Filter media')
+      ->assertDontSee('Save technical / creative changes')
+      ->assertDontSee('Save creator changes')
+      ->assertDontSee('Save costing changes')
       ->assertSee('Supporting files and revisions')
+      ->assertSee('File uploaded')
+      ->assertSee('Revision requested')
+      ->assertSee('Please provide a signed copy.')
+      ->assertSee('is-revision', false)
       ->assertSee('data-bs-target="#submission-attachment-preview-' . $attachment->id . '"', false)
       ->assertSee(route('dashboard.submissions.attachments.preview', [$disclosure, $attachment]), false)
-      ->assertSee('Files cannot be changed until the evaluator reviews this submission.')
+      ->assertSee('Files cannot be changed until the IP Head reviews this submission.')
       ->assertSee('data-update-file-button', false)
       ->assertSee('class="btn btn-primary d-none"', false);
+
+    $disclosure->update(['status' => 'returned']);
+    $this->actingAs($user)
+      ->get(route('dashboard.submissions.show', $disclosure))
+      ->assertOk()
+      ->assertSee('Revision Requested')
+      ->assertSee('class="submission-review-stepper__step is-current" data-timeline-step="review"', false);
+
+    $disclosure->update(['status' => 'revised_submission']);
+    $this->actingAs($user)
+      ->get(route('dashboard.submissions.show', $disclosure))
+      ->assertOk()
+      ->assertSee('Revision submitted')
+      ->assertSee('class="submission-review-stepper__step is-current" data-timeline-step="review"', false);
+
+    $disclosure->update(['status' => 'endorsed', 'endorsed_at' => now()]);
+    $this->actingAs($user)
+      ->get(route('dashboard.submissions.show', $disclosure))
+      ->assertOk()
+      ->assertSee('class="submission-review-stepper__step is-current" data-timeline-step="approved"', false);
+
+    $disclosure->update(['status' => 'filed']);
+    $this->actingAs($user)
+      ->get(route('dashboard.submissions.show', $disclosure))
+      ->assertOk()
+      ->assertSee('class="submission-review-stepper__step is-current" data-timeline-step="ipophl-applied"', false);
+  }
+
+  public function test_returned_submission_can_update_existing_review_table_rows(): void
+  {
+    $user = User::factory()->create([
+      'username' => fake()->unique()->userName(),
+    ]);
+    $disclosure = $this->makeDisclosure($user);
+    $disclosure->update(['status' => 'returned']);
+    $technology = $disclosure->technologies()->create([
+      'technology_title' => 'Community water filter',
+      'abstract_summary' => 'Abstract',
+      'technical_field' => 'Water treatment',
+      'background_summary' => 'Background',
+      'invention_summary' => 'Summary',
+      'detailed_description' => 'Description',
+      'examples_results' => 'Results',
+    ]);
+    $inventor = $disclosure->inventors()->create([
+      'first_name' => 'Juan',
+      'middle_initial' => 'P',
+      'last_name' => 'Dela Cruz',
+      'suffix' => '',
+      'full_name' => 'Dela Cruz, Juan P.',
+      'email' => 'juan@example.com',
+      'country_of_citizenship' => 'Philippines',
+      'affiliation' => 'Student researcher',
+      'position_affiliation' => 'Student researcher',
+      'technical_contribution' => 'Designed and tested the filter.',
+      'contribution_percent' => '100.00',
+      'contribution_nature' => ['conception'],
+      'signature_name' => 'Juan P. Dela Cruz',
+      'declaration_confirmed' => true,
+      'declaration_date' => '2026-10-08',
+      'is_primary' => true,
+    ]);
+    $costItem = $disclosure->costItems()->create([
+      'item' => 'Filter media',
+      'description' => 'Replacement filter media',
+      'quantity' => '2.00',
+      'unit_cost' => '150.00',
+      'total_cost' => '300.00',
+      'purpose' => 'Prototype testing',
+    ]);
+
+    $this->actingAs($user)
+      ->get(route('dashboard.submissions.show', $disclosure))
+      ->assertOk()
+      ->assertSee('Save technical / creative changes')
+      ->assertSee('Save creator changes')
+      ->assertSee('Save costing changes')
+      ->assertSee('data-narrative-title="Abstract"', false)
+      ->assertSee('data-narrative-content="Abstract"', false)
+      ->assertSee('class="submission-revision-details-form" novalidate', false);
+
+    $this->post(route('dashboard.submissions.revision-details', $disclosure), [
+      'section' => 'technologies',
+      'technologies' => [
+        $technology->id => [
+          'technology_title' => 'Improved community filter',
+          'abstract_summary' => 'Updated abstract',
+          'technical_field' => 'Water treatment',
+          'background_summary' => 'Updated background',
+          'invention_summary' => 'Updated summary',
+          'detailed_description' => 'Updated description',
+          'examples_results' => 'Updated results',
+        ],
+      ],
+    ])->assertRedirect(route('dashboard.submissions.show', $disclosure));
+
+    $this->post(route('dashboard.submissions.revision-details', $disclosure), [
+      'section' => 'inventors',
+      'inventors' => [
+        $inventor->id => [
+          'first_name' => 'Jane',
+          'middle_initial' => 'Q',
+          'last_name' => 'Doe',
+          'suffix' => '',
+          'email' => 'jane@example.com',
+          'country_of_citizenship' => 'Philippines',
+          'position_affiliation' => 'Faculty researcher',
+          'technical_contribution' => 'Updated contribution details.',
+          'contribution_percent' => '100.00',
+          'contribution_nature' => ['technical_feature'],
+          'contribution_other' => '',
+          'signature_name' => 'Jane Q. Doe',
+          'declaration_confirmed' => '1',
+          'declaration_date' => '2026-10-09',
+        ],
+      ],
+    ])->assertRedirect(route('dashboard.submissions.show', $disclosure));
+
+    $this->post(route('dashboard.submissions.revision-details', $disclosure), [
+      'section' => 'cost_items',
+      'cost_items' => [
+        $costItem->id => [
+          'item' => 'Updated filter media',
+          'description' => 'Updated replacement media',
+          'quantity' => '3.00',
+          'unit_cost' => '50.55',
+          'purpose' => 'Updated testing',
+        ],
+      ],
+    ])->assertRedirect(route('dashboard.submissions.show', $disclosure));
+
+    $this->assertDatabaseHas('disclosure_technologies', [
+      'id' => $technology->id,
+      'technology_title' => 'Improved community filter',
+      'abstract_summary' => 'Updated abstract',
+    ]);
+    $this->assertDatabaseHas('inventors', [
+      'id' => $inventor->id,
+      'first_name' => 'Jane',
+      'full_name' => 'Doe, Jane Q.',
+    ]);
+    $this->assertDatabaseHas('disclosure_cost_items', [
+      'id' => $costItem->id,
+      'item' => 'Updated filter media',
+      'total_cost' => '151.65',
+    ]);
+    $this->assertSame('151.65', $disclosure->fresh()->total_development_cost);
+    $this->assertSame('returned', $disclosure->fresh()->status);
+  }
+
+  public function test_submission_details_cannot_be_edited_before_revision_is_requested(): void
+  {
+    $user = User::factory()->create([
+      'username' => fake()->unique()->userName(),
+    ]);
+    $disclosure = $this->makeDisclosure($user);
+
+    $this->actingAs($user)
+      ->post(route('dashboard.submissions.revision-details', $disclosure), [
+        'section' => 'cost_items',
+      ])
+      ->assertStatus(409);
+  }
+
+  public function test_revision_detail_edits_cannot_add_new_rows(): void
+  {
+    $user = User::factory()->create([
+      'username' => fake()->unique()->userName(),
+    ]);
+    $disclosure = $this->makeDisclosure($user);
+    $disclosure->update(['status' => 'returned']);
+    $technology = $disclosure->technologies()->create([
+      'technology_title' => 'Community water filter',
+      'abstract_summary' => 'Abstract',
+      'technical_field' => 'Water treatment',
+      'background_summary' => 'Background',
+      'invention_summary' => 'Summary',
+      'detailed_description' => 'Description',
+      'examples_results' => 'Results',
+    ]);
+
+    $this->actingAs($user)
+      ->post(route('dashboard.submissions.revision-details', $disclosure), [
+        'section' => 'technologies',
+        'technologies' => [
+          $technology->id => [
+            'technology_title' => $technology->technology_title,
+            'abstract_summary' => $technology->abstract_summary,
+            'technical_field' => $technology->technical_field,
+            'background_summary' => $technology->background_summary,
+            'invention_summary' => $technology->invention_summary,
+            'detailed_description' => $technology->detailed_description,
+            'examples_results' => $technology->examples_results,
+          ],
+          999999 => [
+            'technology_title' => 'Unauthorized added technology',
+            'abstract_summary' => 'Abstract',
+            'technical_field' => 'Field',
+            'background_summary' => 'Background',
+            'invention_summary' => 'Summary',
+            'detailed_description' => 'Description',
+            'examples_results' => 'Results',
+          ],
+        ],
+      ])
+      ->assertStatus(422);
+
+    $this->assertSame(1, $disclosure->technologies()->count());
+    $this->assertDatabaseMissing('disclosure_technologies', [
+      'technology_title' => 'Unauthorized added technology',
+    ]);
   }
 
   public function test_review_submission_has_one_update_button_for_requested_files(): void
@@ -225,7 +570,7 @@ class InnovationDisclosureTest extends TestCase
       ->assertNotFound();
   }
 
-  public function test_user_can_update_only_evaluator_requested_files_after_review(): void
+  public function test_user_can_update_only_ip_head_requested_files_after_review(): void
   {
     Storage::fake('local');
     $user = User::factory()->create([
@@ -292,6 +637,18 @@ class InnovationDisclosureTest extends TestCase
     $this->assertFalse(Storage::disk('local')->exists($drawingPath));
     $this->assertTrue(Storage::disk('local')->exists($attachment->stored_path));
     $this->assertTrue(Storage::disk('local')->exists($drawingAttachment->stored_path));
+    $this->assertDatabaseHas('disclosure_attachment_events', [
+      'disclosure_attachment_id' => $attachment->id,
+      'event_type' => 'uploaded',
+      'version' => 2,
+      'original_name' => 'methodology-revised.pdf',
+    ]);
+    $this->assertDatabaseHas('disclosure_attachment_events', [
+      'disclosure_attachment_id' => $drawingAttachment->id,
+      'event_type' => 'uploaded',
+      'version' => 2,
+      'original_name' => 'drawing-revised.pdf',
+    ]);
 
     $this->actingAs($user)
       ->get(route('dashboard.submissions.show', $disclosure))
@@ -459,6 +816,11 @@ class InnovationDisclosureTest extends TestCase
     $response = $this->actingAs($user)->post('/dashboard/innovation-disclosures', $data);
 
     $response->assertRedirect(route('dashboard.submissions.index'));
+    $this->actingAs($user)
+      ->get(route('dashboard.submissions.index'))
+      ->assertOk()
+      ->assertSee("indexedDB.open('ipms-idf-drafts', 1)", false)
+      ->assertSee('idf-draft-user-' . $user->id, false);
     $this->assertDatabaseHas('innovation_disclosures', [
       'user_id' => $user->id,
       'email' => 'inventor@example.com',
@@ -473,6 +835,15 @@ class InnovationDisclosureTest extends TestCase
     ]);
     $this->assertDatabaseHas('disclosure_attachments', [
       'type' => 'sample_photo',
+      'original_name' => 'sample-photo.pdf',
+    ]);
+    $attachmentId = DB::table('disclosure_attachments')
+      ->where('original_name', 'sample-photo.pdf')
+      ->value('id');
+    $this->assertDatabaseHas('disclosure_attachment_events', [
+      'disclosure_attachment_id' => $attachmentId,
+      'event_type' => 'uploaded',
+      'version' => 1,
       'original_name' => 'sample-photo.pdf',
     ]);
     $storedPath = DB::table('disclosure_attachments')
@@ -522,6 +893,40 @@ class InnovationDisclosureTest extends TestCase
       'created_at' => now(),
       'updated_at' => now(),
     ]);
+  }
+
+  public function test_authenticated_user_can_submit_without_cost_items(): void
+  {
+    Storage::fake('local');
+    $user = User::factory()->create([
+      'username' => fake()->unique()->userName(),
+    ]);
+    $data = $this->validDisclosureData();
+    $data['materials'] = [[
+      'item' => '',
+      'description' => '',
+      'quantity' => '',
+      'unit_cost' => '',
+      'purpose' => '',
+    ]];
+    $data['attachments'] = [
+      'sample_photo' => UploadedFile::fake()->create('sample-photo.pdf', 20, 'application/pdf'),
+    ];
+
+    $this->actingAs($user)
+      ->post(route('dashboard.innovation-disclosures.store'), $data)
+      ->assertRedirect(route('dashboard.submissions.index'));
+
+    $disclosureId = DB::table('innovation_disclosures')
+      ->where('user_id', $user->id)
+      ->value('id');
+    $this->assertDatabaseHas('innovation_disclosures', [
+      'id' => $disclosureId,
+      'total_development_cost' => '0.00',
+    ]);
+    $this->assertSame(0, DB::table('disclosure_cost_items')
+      ->where('innovation_disclosure_id', $disclosureId)
+      ->count());
   }
 
   public function test_creator_contributions_must_total_one_hundred_percent(): void

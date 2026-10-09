@@ -39,10 +39,10 @@
 
             <li class="step-card">
                 <span class="step-number">3</span>
-                <h3>Monitor and search</h3>
+                <h3>Monitor your records</h3>
                 <p>
-                    Track statuses and activities, and find relevant
-                    patent information through integrated search.
+                    Track statuses and activities as your records move
+                    through the workflow.
                 </p>
             </li>
 

@@ -1,0 +1,22 @@
+/* Home responsive — container and nav text tweaks.
+   Hero breakpoints live in hero_carousel.css; section grids in
+   home_sections.css. Load BEFORE navbar.css. */
+
+@media (max-width: 768px) {
+    .container { width: min(100% - 32px, var(--container)); }
+    .nav-login { font-size: 12px; }
+
+}
+
+@media (max-width: 480px) {
+    .container { width: calc(100% - 24px); }
+    .navbar { padding: 0 9px; }
+    .navbar-inner { gap: 8px; }
+    .brand { min-width: 0; }
+    .nav-login { font-size: 11px; white-space: nowrap; }
+
+}
+
+@media (max-width: 360px) {
+    .nav-login { font-size: 10px; }
+}

@@ -45,9 +45,8 @@ use App\Http\Controllers\form_layouts\HorizontalForm;
 use App\Http\Controllers\tables\Basic as TablesBasic;
 
 use App\Http\Controllers\HomeController;
-use App\Http\Controllers\PatentController;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\EvaluatorDashboardController;
+use App\Http\Controllers\IpHeadDashboardController;
 use App\Http\Controllers\InnovationDisclosureController;
 
 /*
@@ -58,9 +57,6 @@ use App\Http\Controllers\InnovationDisclosureController;
 
 Route::get('/', [HomeController::class, 'index'])
     ->name('home');
-
-Route::post('/patents/search', [PatentController::class, 'search'])
-    ->name('patents.search.api');
 
 Route::get('/login', [AuthController::class, 'showLogin'])
     ->name('login');
@@ -81,33 +77,33 @@ Route::post('/signin', [AuthController::class, 'signin'])
 */
 
 Route::middleware('auth')->group(function () {
-    Route::get('/evaluator_dashboard', [EvaluatorDashboardController::class, 'index'])
-        ->name('evaluator-dashboard.index');
-    Route::get('/evaluator_dashboard/submissions', [EvaluatorDashboardController::class, 'submissions'])
-        ->name('evaluator-dashboard.submissions');
-    Route::get('/evaluator_dashboard/disclosures/{disclosure}', [EvaluatorDashboardController::class, 'showReview'])
+    Route::get('/ip_head', [IpHeadDashboardController::class, 'index'])
+        ->name('ip-head-dashboard.index');
+    Route::get('/ip_head/submissions', [IpHeadDashboardController::class, 'submissions'])
+        ->name('ip-head-dashboard.submissions');
+    Route::get('/ip_head/disclosures/{disclosure}', [IpHeadDashboardController::class, 'showReview'])
         ->whereNumber('disclosure')
-        ->name('evaluator-dashboard.disclosures.show');
-    Route::get('/evaluator_dashboard/disclosures/{disclosure}/xml', [EvaluatorDashboardController::class, 'exportAsXml'])
+        ->name('ip-head-dashboard.disclosures.show');
+    Route::get('/ip_head/disclosures/{disclosure}/xml', [IpHeadDashboardController::class, 'exportAsXml'])
         ->whereNumber('disclosure')
-        ->name('evaluator-dashboard.disclosures.xml');
-    Route::post('/evaluator_dashboard/disclosures/{disclosure}/attachments/review', [EvaluatorDashboardController::class, 'updateDisclosureAttachmentReviews'])
+        ->name('ip-head-dashboard.disclosures.xml');
+    Route::post('/ip_head/disclosures/{disclosure}/attachments/review', [IpHeadDashboardController::class, 'updateDisclosureAttachmentReviews'])
         ->whereNumber('disclosure')
-        ->name('evaluator-dashboard.disclosures.attachments.review');
-    Route::post('/evaluator_dashboard/disclosures/{disclosure}/review', [EvaluatorDashboardController::class, 'updateReview'])
+        ->name('ip-head-dashboard.disclosures.attachments.review');
+    Route::post('/ip_head/disclosures/{disclosure}/review', [IpHeadDashboardController::class, 'updateReview'])
         ->whereNumber('disclosure')
-        ->name('evaluator-dashboard.review');
-    Route::post('/evaluator_dashboard/attachments/{attachment}/review', [EvaluatorDashboardController::class, 'updateAttachmentReview'])
+        ->name('ip-head-dashboard.review');
+    Route::post('/ip_head/attachments/{attachment}/review', [IpHeadDashboardController::class, 'updateAttachmentReview'])
         ->whereNumber('attachment')
-        ->name('evaluator-dashboard.attachments.review');
-    Route::get('/evaluator_dashboard/disclosures/{disclosure}/attachments/{attachment}/preview', [EvaluatorDashboardController::class, 'previewAttachment'])
+        ->name('ip-head-dashboard.attachments.review');
+    Route::get('/ip_head/disclosures/{disclosure}/attachments/{attachment}/preview', [IpHeadDashboardController::class, 'previewAttachment'])
         ->whereNumber('disclosure')
         ->whereNumber('attachment')
-        ->name('evaluator-dashboard.attachments.preview');
-    Route::get('/evaluator_dashboard/disclosures/{disclosure}/technology-files/{file}/preview', [InnovationDisclosureController::class, 'previewTechnologyFile'])
+        ->name('ip-head-dashboard.attachments.preview');
+    Route::get('/ip_head/disclosures/{disclosure}/technology-files/{file}/preview', [InnovationDisclosureController::class, 'previewTechnologyFile'])
         ->whereNumber('disclosure')
         ->whereNumber('file')
-        ->name('evaluator-dashboard.technology-files.preview');
+        ->name('ip-head-dashboard.technology-files.preview');
 
     Route::get('/dashboard', [InnovationDisclosureController::class, 'index'])
         ->name('dashboard-analytics');
@@ -132,6 +128,8 @@ Route::middleware('auth')->group(function () {
         ->name('dashboard.submissions.technology-files.preview');
     Route::post('/dashboard/submissions/{disclosure}/attachments', [InnovationDisclosureController::class, 'storeAttachment'])
         ->name('dashboard.submissions.attachments.store');
+    Route::post('/dashboard/submissions/{disclosure}/revision-details', [InnovationDisclosureController::class, 'updateRevisionDetails'])
+        ->name('dashboard.submissions.revision-details');
     Route::delete('/dashboard/submissions/{disclosure}', [InnovationDisclosureController::class, 'destroy'])
         ->name('dashboard.submissions.destroy');
     Route::get('/dashboard/submissions/{disclosure}/attachments/{attachment}', [InnovationDisclosureController::class, 'downloadAttachment'])

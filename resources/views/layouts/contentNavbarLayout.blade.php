@@ -6,7 +6,13 @@
 @php
 /* Display elements */
 $contentNavbar = $contentNavbar ?? true;
-$containerNav = $containerNav ?? 'container-xxl';
+$isWideDashboardPage = request()->routeIs(
+    'dashboard-analytics',
+    'dashboard.innovation-disclosure.*',
+    'dashboard.submissions.*',
+    'ip-head-dashboard.*'
+);
+$containerNav = trim(($containerNav ?? 'container-xxl') . ($isWideDashboardPage ? ' dashboard-wide-container' : ''));
 $isNavbar = $isNavbar ?? true;
 $isMenu = $isMenu ?? true;
 $isFlex = $isFlex ?? false;
@@ -24,7 +30,7 @@ $footerFixed = isset($configData['footerFixed']) ? $configData['footerFixed'] : 
 $menuCollapsed = isset($configData['menuCollapsed']) ? $configData['menuCollapsed'] : '';
 
 /* Content classes */
-$container = ($container ?? 'container-xxl');
+$container = trim(($container ?? 'container-xxl') . ($isWideDashboardPage ? ' dashboard-wide-container' : ''));
 
 @endphp
 
@@ -61,25 +67,25 @@ $container = ($container ?? 'container-xxl');
                         @endif
 
                         @php
-                        $homeRoute = auth()->user()?->is_evaluator
-                        ? route('evaluator-dashboard.index')
+                        $homeRoute = auth()->user()?->is_ip_head
+                        ? route('ip-head-dashboard.index')
                         : route('dashboard-analytics');
                         $breadcrumbs = match (request()->route()?->getName()) {
                         'dashboard-analytics' => [
                         ['label' => 'Home', 'url' => $homeRoute],
                         ['label' => 'Dashboard'],
                         ],
-                        'evaluator-dashboard.index' => [
+                        'ip-head-dashboard.index' => [
                         ['label' => 'Home', 'url' => $homeRoute],
-                        ['label' => 'Evaluator Dashboard'],
+                        ['label' => 'IP Head Dashboard'],
                         ],
-                        'evaluator-dashboard.submissions' => [
+                        'ip-head-dashboard.submissions' => [
                         ['label' => 'Home', 'url' => $homeRoute],
                         ['label' => 'Innovation Submission'],
                         ],
-                        'evaluator-dashboard.disclosures.show' => [
+                        'ip-head-dashboard.disclosures.show' => [
                         ['label' => 'Home', 'url' => $homeRoute],
-                        ['label' => 'Innovation Submission', 'url' => route('evaluator-dashboard.submissions')],
+                        ['label' => 'Innovation Submission', 'url' => route('ip-head-dashboard.submissions')],
                         ['label' => 'Review Submission'],
                         ],
                         'dashboard.innovation-disclosure.create' => [

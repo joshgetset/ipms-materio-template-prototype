@@ -88,25 +88,23 @@
                 <div class="hero-slide-content">
 
                     <div class="hero-badge">
-                        Patent Search
+                        Organized Workflows
                     </div>
 
                     <h1>
-                        Discover relevant
-                        <span>patent information.</span>
+                        Keep every IP activity
+                        <span>moving forward.</span>
                     </h1>
 
                     <p class="hero-description">
-                        Search patent information directly from the landing
-                        page and review available patent details through
-                        the integrated search interface.
+                        Track applications, registrations, and important
+                        updates through a clear, centralized workflow.
                     </p>
 
                     <div class="hero-actions">
 
-                        <a href="#" class="btn btn-primary"
-                            onclick="document.getElementById('patentQuery').focus(); return false;">
-                            Search Patent
+                        <a href="#how-it-works" class="btn btn-primary">
+                            See How It Works
                         </a>
 
                         <a href="#features" class="btn btn-secondary">

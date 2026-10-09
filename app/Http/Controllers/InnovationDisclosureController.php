@@ -37,7 +37,7 @@ class InnovationDisclosureController extends Controller
       ->groupBy('status')
       ->pluck('total', 'status');
 
-    return view('content.dashboard.innovation-disclosure.index', [
+    return view('content.dashboard.inventor.inventor-disclosure-index', [
       'totalDisclosures' => $statusCounts->sum(),
       'statusCounts' => $statusCounts,
       'chartLabels' => array_map(fn(string $status) => str_replace('_', ' ', ucfirst($status)), self::STATUSES),
@@ -47,14 +47,14 @@ class InnovationDisclosureController extends Controller
 
   public function create(): View
   {
-    return view('content.dashboard.innovation-disclosure.index', [
+    return view('content.dashboard.inventor.inventor-disclosure-index', [
       'page' => 'form',
     ]);
   }
 
   public function submissions(Request $request): View
   {
-    return view('content.dashboard.my-submissions.index', [
+    return view('content.dashboard.inventor.inventor-index', [
       'disclosures' => $request->user()
         ->innovationDisclosures()
         ->with(['attachments', 'inventors'])
@@ -72,10 +72,10 @@ class InnovationDisclosureController extends Controller
   {
     $ownedDisclosure = $request->user()
       ->innovationDisclosures()
-      ->with(['attachments', 'inventors', 'costItems', 'technologies.files'])
+      ->with(['attachments.events', 'inventors', 'costItems', 'technologies.files'])
       ->findOrFail($disclosure->id);
 
-    return view('content.dashboard.my-submissions.index', [
+    return view('content.dashboard.inventor.inventor-index', [
       'disclosures' => collect([$ownedDisclosure]),
       'detailView' => true,
     ]);
@@ -160,7 +160,7 @@ class InnovationDisclosureController extends Controller
     DisclosureTechnologyFile $file
   ): BinaryFileResponse {
     abort_unless(
-      $request->user()->is_evaluator || $disclosure->user_id === $request->user()->id,
+      $request->user()->is_ip_head || $disclosure->user_id === $request->user()->id,
       403
     );
     $technology = $disclosure->technologies()
@@ -184,7 +184,7 @@ class InnovationDisclosureController extends Controller
     abort_unless(
       in_array($ownedDisclosure->status, ['under_review', 'returned', 'revised_submission'], true),
       409,
-      'Files cannot be changed until the evaluator reviews this submission.'
+      'Files cannot be changed until the IP Head reviews this submission.'
     );
 
     $attachments = $request->file('attachments', []);
@@ -255,6 +255,12 @@ class InnovationDisclosureController extends Controller
             'needs_revision' => false,
             'revision_notes' => null,
           ]);
+          $attachment->events()->create([
+            'event_type' => 'uploaded',
+            'version' => $attachment->version,
+            'original_name' => $attachment->original_name,
+            'occurred_at' => $attachment->submitted_at,
+          ]);
         }
         $hasRemainingRevisions = $ownedDisclosure->attachments()
           ->where('needs_revision', true)
@@ -279,8 +285,191 @@ class InnovationDisclosureController extends Controller
       ->with('toast_message', 'The revised file upload was submitted successfully.');
   }
 
+  public function updateRevisionDetails(Request $request, InnovationDisclosure $disclosure): RedirectResponse
+  {
+    $ownedDisclosure = $request->user()->innovationDisclosures()
+      ->with(['technologies.files', 'inventors', 'costItems'])
+      ->findOrFail($disclosure->id);
+    abort_unless(
+      $ownedDisclosure->status === 'returned',
+      409,
+      'Submission details can only be edited when revision is requested.'
+    );
+
+    $section = $request->validate([
+      'section' => ['required', Rule::in(['technologies', 'inventors', 'cost_items'])],
+    ])['section'];
+
+    if ($section === 'technologies') {
+      $validated = $request->validate([
+        'technologies' => ['required', 'array', 'min:1', 'max:2'],
+        'technologies.*.technology_title' => ['required', 'string', 'max:500'],
+        'technologies.*.abstract_summary' => ['nullable', 'string'],
+        'technologies.*.technical_field' => ['nullable', 'string'],
+        'technologies.*.background_summary' => ['nullable', 'string'],
+        'technologies.*.invention_summary' => ['nullable', 'string'],
+        'technologies.*.detailed_description' => ['nullable', 'string'],
+        'technologies.*.examples_results' => ['nullable', 'string'],
+      ]);
+      $this->ensureExistingRowsOnly($validated['technologies'], $ownedDisclosure->technologies);
+
+      foreach ($ownedDisclosure->technologies as $technology) {
+        $data = $validated['technologies'][$technology->id];
+        foreach (self::TECHNOLOGY_NARRATIVES as $narrative) {
+          if (blank($data[$narrative] ?? null)
+            && ! $technology->files->contains('narrative_key', $narrative)) {
+            return back()
+              ->withErrors(["technologies.{$technology->id}.{$narrative}" => 'Enter this narrative or provide its uploaded PDF.'])
+              ->withInput();
+          }
+        }
+      }
+
+      DB::transaction(function () use ($ownedDisclosure, $validated): void {
+        foreach ($ownedDisclosure->technologies as $technology) {
+          $technology->update($validated['technologies'][$technology->id]);
+        }
+        $primaryTechnology = $ownedDisclosure->technologies->sortBy('id')->first();
+        $legacyNarratives = [];
+        foreach (self::TECHNOLOGY_NARRATIVES as $narrative) {
+          $legacyNarratives[$narrative] = $primaryTechnology->{$narrative} ?? '';
+        }
+        $ownedDisclosure->update([
+          'technology_title' => $primaryTechnology->technology_title,
+          ...$legacyNarratives,
+        ]);
+      });
+    } elseif ($section === 'inventors') {
+      $natureOptions = [
+        'conception',
+        'identification_essential_element',
+        'technical_feature',
+        'experimental_refinement',
+        'reduction_to_practice',
+        'testing_validation',
+        'optimization',
+        'other_substantive',
+      ];
+      $validated = $request->validate([
+        'inventors' => ['required', 'array', 'min:1', 'max:20'],
+        'inventors.*.first_name' => ['required', 'string', 'max:100'],
+        'inventors.*.last_name' => ['required', 'string', 'max:100'],
+        'inventors.*.middle_initial' => ['nullable', 'string', 'max:1'],
+        'inventors.*.suffix' => ['nullable', 'string', 'max:20'],
+        'inventors.*.email' => ['required', 'email', 'max:255'],
+        'inventors.*.country_of_citizenship' => ['nullable', 'string', 'max:255'],
+        'inventors.*.position_affiliation' => ['required', 'string', 'max:500'],
+        'inventors.*.technical_contribution' => ['required', 'string'],
+        'inventors.*.contribution_percent' => ['required', 'numeric', 'decimal:0,2', 'between:0.01,100'],
+        'inventors.*.contribution_nature' => ['required', 'array', 'min:1'],
+        'inventors.*.contribution_nature.*' => ['required', Rule::in($natureOptions)],
+        'inventors.*.contribution_other' => ['nullable', 'string', 'max:500'],
+        'inventors.*.signature_name' => ['required', 'string', 'max:255'],
+        'inventors.*.declaration_confirmed' => ['required', 'accepted'],
+        'inventors.*.declaration_date' => ['required', 'date'],
+      ]);
+      $this->ensureExistingRowsOnly($validated['inventors'], $ownedDisclosure->inventors);
+
+      $contributionTotal = round(array_sum(array_map(
+        static fn (array $inventor): float => (float) $inventor['contribution_percent'],
+        $validated['inventors']
+      )), 2);
+      if ($contributionTotal !== 100.0) {
+        return back()
+          ->withErrors(['inventors' => 'Declared creator contributions must add up to exactly 100%.'])
+          ->withInput();
+      }
+
+      foreach ($validated['inventors'] as $id => $inventor) {
+        if (in_array('other_substantive', $inventor['contribution_nature'], true)
+          && blank($inventor['contribution_other'] ?? null)) {
+          return back()
+            ->withErrors(["inventors.{$id}.contribution_other" => 'Specify the other substantive contribution.'])
+            ->withInput();
+        }
+        if (! in_array('other_substantive', $inventor['contribution_nature'], true)
+          && filled($inventor['contribution_other'] ?? null)) {
+          return back()
+            ->withErrors(["inventors.{$id}.contribution_other" => 'This field is only used for other substantive contributions.'])
+            ->withInput();
+        }
+      }
+
+      DB::transaction(function () use ($ownedDisclosure, $validated): void {
+        foreach ($ownedDisclosure->inventors as $inventor) {
+          $data = $validated['inventors'][$inventor->id];
+          $fullName = $data['last_name'] . ', ' . trim(implode(' ', array_filter([
+            $data['first_name'],
+            filled($data['middle_initial'] ?? null) ? strtoupper(trim($data['middle_initial'])) . '.' : null,
+            $data['suffix'] ?? null,
+          ])));
+          $inventor->update([
+            ...$data,
+            'full_name' => $fullName,
+            'affiliation' => $data['position_affiliation'],
+          ]);
+        }
+        $primaryInventor = $ownedDisclosure->inventors->firstWhere('is_primary', true);
+        if ($primaryInventor) {
+          $ownedDisclosure->update([
+            'lead_creator_name' => $primaryInventor->full_name,
+            'email' => $primaryInventor->email,
+          ]);
+        }
+      });
+    } else {
+      $validated = $request->validate([
+        'cost_items' => ['required', 'array', 'min:1', 'max:100'],
+        'cost_items.*.item' => ['required', 'string', 'max:255'],
+        'cost_items.*.description' => ['required', 'string', 'max:2000'],
+        'cost_items.*.quantity' => ['required', 'numeric', 'gt:0', 'decimal:0,2'],
+        'cost_items.*.unit_cost' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
+        'cost_items.*.purpose' => ['nullable', 'string', 'max:2000'],
+      ]);
+      $this->ensureExistingRowsOnly($validated['cost_items'], $ownedDisclosure->costItems);
+
+      DB::transaction(function () use ($ownedDisclosure, $validated): void {
+        $totalDevelopmentCost = 0.0;
+        foreach ($ownedDisclosure->costItems as $costItem) {
+          $data = $validated['cost_items'][$costItem->id];
+          $lineTotal = round((float) $data['quantity'] * (float) $data['unit_cost'], 2);
+          $costItem->update([
+            ...$data,
+            'total_cost' => $lineTotal,
+          ]);
+          $totalDevelopmentCost += $lineTotal;
+        }
+        $ownedDisclosure->update([
+          'total_development_cost' => round($totalDevelopmentCost, 2),
+        ]);
+      });
+    }
+
+    return redirect()
+      ->route('dashboard.submissions.show', $ownedDisclosure)
+      ->with('toast_type', 'success')
+      ->with('toast_message', 'The requested submission details were updated successfully.');
+  }
+
   public function store(Request $request): RedirectResponse
   {
+    $materials = $request->input('materials');
+    if (is_array($materials)) {
+      $request->merge([
+        'materials' => array_values(array_filter($materials, static function ($material): bool {
+          if (! is_array($material)) {
+            return true;
+          }
+          foreach (['item', 'description', 'quantity', 'unit_cost', 'purpose'] as $field) {
+            if (filled($material[$field] ?? null)) {
+              return true;
+            }
+          }
+          return false;
+        })),
+      ]);
+    }
+
     $ownershipDeclaration = $request->input('ownership_declaration');
     $relationship = $request->input('university_relationship');
     $inventors = $request->input('inventors', []);
@@ -349,7 +538,7 @@ class InnovationDisclosureController extends Controller
       'inventors.*.signature_name' => ['required', 'string', 'max:255'],
       'inventors.*.declaration_confirmed' => ['required', 'accepted'],
       'inventors.*.declaration_date' => ['required', 'date'],
-      'materials' => ['required', 'array', 'min:1', 'max:100'],
+      'materials' => ['sometimes', 'array', 'max:100'],
       'materials.*.item' => ['required', 'string', 'max:255'],
       'materials.*.description' => ['required', 'string', 'max:2000'],
       'materials.*.quantity' => ['required', 'numeric', 'gt:0', 'decimal:0,2'],
@@ -429,7 +618,7 @@ class InnovationDisclosureController extends Controller
     }
 
     $lineTotals = [];
-    foreach ($validated['materials'] as $index => $material) {
+    foreach ($validated['materials'] ?? [] as $index => $material) {
       $lineTotal = round((float) $material['quantity'] * (float) $material['unit_cost'], 2);
       if (! is_finite($lineTotal) || $lineTotal > 9999999999.99) {
         return back()
@@ -449,7 +638,7 @@ class InnovationDisclosureController extends Controller
 
     try {
       DB::transaction(function () use ($request, $validated, $lineTotals, $totalDevelopmentCost, &$storageDirectory): void {
-        $materials = $validated['materials'];
+        $materials = $validated['materials'] ?? [];
         $attachments = $validated['attachments'] ?? [];
         $inventorRows = $validated['inventors'];
         $technologies = $validated['technologies'];
@@ -534,12 +723,19 @@ class InnovationDisclosureController extends Controller
             throw new \RuntimeException('The uploaded attachment could not be stored.');
           }
 
-          $disclosure->attachments()->create([
+          $attachment = $disclosure->attachments()->create([
             'type' => $type,
             'original_name' => $file->getClientOriginalName(),
             'stored_path' => $storedPath,
             'mime_type' => $file->getMimeType(),
             'size_bytes' => $file->getSize(),
+            'version' => 1,
+          ]);
+          $attachment->events()->create([
+            'event_type' => 'uploaded',
+            'version' => 1,
+            'original_name' => $attachment->original_name,
+            'occurred_at' => $attachment->created_at,
           ]);
         }
       });
@@ -570,5 +766,19 @@ class InnovationDisclosureController extends Controller
         }
       },
     ];
+  }
+
+  private function ensureExistingRowsOnly(array $submittedRows, \Illuminate\Database\Eloquent\Collection $existingRows): void
+  {
+    $submittedIds = array_map('intval', array_keys($submittedRows));
+    $existingIds = $existingRows->modelKeys();
+    sort($submittedIds);
+    sort($existingIds);
+
+    abort_unless(
+      $submittedIds === $existingIds,
+      422,
+      'Only existing submission rows can be edited; rows cannot be added or removed.'
+    );
   }
 }

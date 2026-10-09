@@ -45,7 +45,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
-            'is_evaluator' => 'boolean',
+            'is_ip_head' => 'boolean',
         ];
     }
 

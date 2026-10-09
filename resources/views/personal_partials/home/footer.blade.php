@@ -42,14 +42,6 @@
                 </ul>
             </nav>
 
-            <nav class="footer-col" aria-label="Tools">
-                <h3 class="footer-title">Tools</h3>
-
-                <ul class="footer-links">
-                    <li><a href="#patentQuery">Patent search</a></li>
-                </ul>
-            </nav>
-
         </div>
 
         <div class="footer-bottom">

@@ -29,45 +29,6 @@
 
                 <a href="#how-it-works">How It Works</a>
 
-                <div class="patent-search">
-
-                    <form
-                        id="patentSearchForm"
-                        data-search-url="{{ route('patents.search.api') }}">
-
-                        <div class="search-input-wrapper">
-
-                            <input
-                                type="text"
-                                id="patentQuery"
-                                name="query"
-                                placeholder="Search Patent"
-                                autocomplete="off">
-
-                            <button
-                                type="submit"
-                                class="search-submit"
-                                aria-label="Search patents">
-                                <svg
-                                    width="17"
-                                    height="17"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    stroke-width="2"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round">
-                                    <circle cx="11" cy="11" r="7"></circle>
-                                    <path d="m20 20-4-4"></path>
-                                </svg>
-                            </button>
-
-                        </div>
-
-                    </form>
-
-                </div>
-
             </nav>
 
             <button
@@ -114,7 +75,6 @@
             <a href="#about">About</a>
             <a href="#features">Features</a>
             <a href="#how-it-works">How It Works</a>
-            <a href="#patentQuery" class="mobile-nav-search" data-mobile-search="true">Search Patent</a>
         </nav>
     </div>
 
@@ -146,14 +106,6 @@
                 <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
             </svg>
             <span class="dock-label">How It Works</span>
-        </a>
-
-        <a href="#patentQuery" class="dock-link" data-side-action="search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <span class="dock-label">Patent Search</span>
         </a>
 
         <a href="{{ Auth::check() ? route('dashboard-analytics') : route('login') }}" class="dock-link">
