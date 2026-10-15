@@ -64,6 +64,12 @@ Route::get('/login', [AuthController::class, 'showLogin'])
 Route::post('/login', [AuthController::class, 'login'])
     ->name('login.submit');
 
+Route::get('/auth/google', [AuthController::class, 'redirectToGoogle'])
+    ->name('auth.google.redirect');
+
+Route::get('/auth/google/callback', [AuthController::class, 'handleGoogleCallback'])
+    ->name('auth.google.callback');
+
 Route::get('/signin', [AuthController::class, 'showSignin'])
     ->name('signin');
 
@@ -109,6 +115,10 @@ Route::middleware('auth')->group(function () {
         ->name('dashboard-analytics');
     Route::get('/dashboard/innovation-disclosure', [InnovationDisclosureController::class, 'create'])
         ->name('dashboard.innovation-disclosure.create');
+    Route::post('/dashboard/innovation-disclosure/uploads', [InnovationDisclosureController::class, 'stageIdfUpload'])
+        ->name('dashboard.innovation-disclosure.uploads.store');
+    Route::delete('/dashboard/innovation-disclosure/uploads/{token}', [InnovationDisclosureController::class, 'destroyStagedIdfUpload'])
+        ->name('dashboard.innovation-disclosure.uploads.destroy');
     Route::post('/dashboard/innovation-disclosures', [InnovationDisclosureController::class, 'store'])
         ->name('dashboard.innovation-disclosures.store');
     Route::get('/dashboard/submissions', [InnovationDisclosureController::class, 'submissions'])
@@ -126,12 +136,20 @@ Route::middleware('auth')->group(function () {
         ->whereNumber('disclosure')
         ->whereNumber('file')
         ->name('dashboard.submissions.technology-files.preview');
+    Route::get('/dashboard/submissions/{disclosure}/technology-files/{file}/versions/{version}/preview', [InnovationDisclosureController::class, 'previewTechnologyFileVersion'])
+        ->whereNumber('disclosure')
+        ->whereNumber('file')
+        ->whereNumber('version')
+        ->name('dashboard.submissions.technology-files.versions.preview');
     Route::post('/dashboard/submissions/{disclosure}/attachments', [InnovationDisclosureController::class, 'storeAttachment'])
         ->name('dashboard.submissions.attachments.store');
     Route::post('/dashboard/submissions/{disclosure}/revision-details', [InnovationDisclosureController::class, 'updateRevisionDetails'])
         ->name('dashboard.submissions.revision-details');
-    Route::delete('/dashboard/submissions/{disclosure}', [InnovationDisclosureController::class, 'destroy'])
-        ->name('dashboard.submissions.destroy');
+    Route::post('/dashboard/submissions/{disclosure}/technologies/{technology}/files/{file}/revision', [InnovationDisclosureController::class, 'storeTechnologyFileRevision'])
+        ->whereNumber('disclosure')
+        ->whereNumber('technology')
+        ->whereNumber('file')
+        ->name('dashboard.submissions.technology-files.revision');
     Route::get('/dashboard/submissions/{disclosure}/attachments/{attachment}', [InnovationDisclosureController::class, 'downloadAttachment'])
         ->name('dashboard.submissions.attachments.download');
 });

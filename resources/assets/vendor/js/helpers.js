@@ -432,8 +432,7 @@ const Helpers = {
     if (!layoutMenu) return this._unbindMenuMouseEvents();
 
     if (!this._menuMouseEnter) {
-      t;
-      his._menuMouseEnter = () => {
+      this._menuMouseEnter = () => {
         this._setMenuHoverState(false);
       };
       layoutMenu.addEventListener('mouseenter', this._menuMouseEnter, false);
@@ -441,8 +440,7 @@ const Helpers = {
     }
 
     if (!this._menuMouseLeave) {
-      t;
-      his._menuMouseLeave = () => {
+      this._menuMouseLeave = () => {
         this._setMenuHoverState(false);
       };
       layoutMenu.addEventListener('mouseleave', this._menuMouseLeave, false);

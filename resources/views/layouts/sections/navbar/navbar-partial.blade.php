@@ -17,9 +17,49 @@ $displayName = $currentUser?->name ?: $currentUser?->username ?: 'Account';
 
 <div class="navbar-nav-right d-flex align-items-center px-4" id="navbar-collapse">
     <a class="navbar-brand fw-semibold d-none d-sm-block text-truncate w-50" href="{{ url('/') }}">Intellectual Property Management System</a>
-    <ul class="navbar-nav flex-row align-items-center flex-shrink-0 ms-auto">
+    <ul class="navbar-nav flex-row align-items-center flex-shrink-0 ms-auto submission-navbar-actions">
+        @if ($currentUser && ! $currentUser->is_ip_head)
+        <li
+            class="nav-item navbar-dropdown dropdown-notifications dropdown"
+            data-submission-notifications
+            data-submission-status-url="{{ route('dashboard.submissions.status-updates') }}"
+            data-submission-url-template="{{ route('dashboard.submissions.show', ['disclosure' => '__DISCLOSURE__']) }}"
+            data-notification-user="{{ $currentUser->id }}">
+            <a
+                class="nav-link dropdown-toggle hide-arrow submission-notification-toggle"
+                href="javascript:void(0);"
+                data-bs-toggle="dropdown"
+                data-bs-auto-close="outside"
+                aria-expanded="false"
+                aria-label="Submission notifications">
+                <i class="icon-base ri ri-notification-4-line icon-22px" aria-hidden="true"></i>
+                <span class="badge rounded-pill bg-danger badge-notifications d-none" data-submission-notification-count aria-label="Unread submission updates"></span>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end py-0 submission-notification-menu">
+                <li class="dropdown-menu-header border-bottom">
+                    <div class="d-flex align-items-center py-3 px-4">
+                        <h6 class="mb-0 me-auto">Submission updates</h6>
+                        <span class="badge bg-label-primary" data-submission-notification-summary>Latest updates</span>
+                    </div>
+                </li>
+                <li class="dropdown-notifications-list scrollable-container">
+                    <ul class="list-unstyled mb-0" data-submission-notification-list>
+                        <li class="dropdown-notifications-item px-4 py-3 text-body-secondary" data-submission-notification-empty>
+                            No submission updates yet.
+                        </li>
+                    </ul>
+                </li>
+                <li class="dropdown-menu-footer border-top">
+                    <a href="{{ route('dashboard.submissions.index') }}" class="dropdown-item d-flex justify-content-center p-3">
+                        View my submissions
+                    </a>
+                </li>
+            </ul>
+        </li>
+        @endif
+
         <!-- Place this tag where you want the button to render. -->
-        <li class="nav-item lh-1 me-4">
+        <li class="nav-item lh-1 submission-navbar-github-button">
             <a class="github-button" href="{{config('variables.repository')}}" data-icon="octicon-star" data-size="large" data-show-count="true" aria-label="Star themeselection/sneat-html-laravel-admin-template-free on GitHub">Star</a>
         </li>
 
@@ -88,3 +128,6 @@ $displayName = $currentUser?->name ?: $currentUser?->username ?: 'Account';
         <!--/ User -->
     </ul>
 </div>
+@if ($currentUser && ! $currentUser->is_ip_head)
+<script src="{{ asset('user/js/user-submission-status.js') }}" defer></script>
+@endif

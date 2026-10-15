@@ -1,9 +1,9 @@
 @php
 $statusLabels = [
 'submitted' => 'For Review',
-'under_review' => 'Under review',
-'revised_submission' => 'Revised Submission',
-'returned' => 'Revision requested',
+'under_review' => 'For Review',
+'revised_submission' => 'For Review',
+'returned' => 'For Review',
 'endorsed' => 'Endorsed',
 'filed' => 'Filed',
 ];
@@ -58,7 +58,7 @@ $statusLabels = [
               <i class="icon-base ri ri-eye-line icon-24px" aria-hidden="true"></i>
             </a>
           </td>
-          <td title="{{ str_replace('_', ' ', ucfirst($disclosure->technology_type)) }}"><span class="submission-table__type">{{ str_replace('_', ' ', ucfirst($disclosure->technology_type)) }}</span></td>
+          <td title="{{ $disclosure->technology_type_label }}"><span class="submission-table__type">{{ $disclosure->technology_type_label }}</span></td>
           <td>
             <span class="d-block fw-medium inventor-submissions-table__title" title="{{ $disclosure->technology_title }}">{{ $disclosure->technology_title }}</span>
           </td>

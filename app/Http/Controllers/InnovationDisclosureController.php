@@ -8,13 +8,18 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Throwable;
 use App\Models\DisclosureAttachment;
+use App\Models\DisclosureTechnology;
 use App\Models\DisclosureTechnologyFile;
+use App\Models\DisclosureTechnologyFileVersion;
+use App\Models\IdfStagedUpload;
 use App\Models\InnovationDisclosure;
 
 class InnovationDisclosureController extends Controller
@@ -27,6 +32,17 @@ class InnovationDisclosureController extends Controller
     'invention_summary',
     'detailed_description',
     'examples_results',
+  ];
+  private const TECHNOLOGY_REQUIRED_FILES = ['sample_photo', 'technical_drawing'];
+  private const TECHNOLOGY_FILE_KEYS = [
+    'abstract_summary',
+    'technical_field',
+    'background_summary',
+    'invention_summary',
+    'detailed_description',
+    'examples_results',
+    'sample_photo',
+    'technical_drawing',
   ];
 
   public function index(Request $request): View
@@ -45,11 +61,97 @@ class InnovationDisclosureController extends Controller
     ]);
   }
 
-  public function create(): View
+  public function create(Request $request): View
   {
+    $this->purgeExpiredStagedUploads();
+    $stagedTokens = array_filter(
+      Arr::flatten($request->old('idf_upload_tokens', [])),
+      static fn ($token): bool => is_string($token) && preg_match('/^[A-Za-z0-9]{64}$/', $token) === 1
+    );
+    $stagedUploadNames = [];
+    if ($stagedTokens !== []) {
+      $tokenByHash = [];
+      foreach ($stagedTokens as $token) {
+        $tokenByHash[hash('sha256', $token)] = $token;
+      }
+      $stagedUploadNames = IdfStagedUpload::query()
+        ->where('user_id', $request->user()->id)
+        ->whereIn('token_hash', array_keys($tokenByHash))
+        ->where('expires_at', '>', now())
+        ->get(['token_hash', 'original_name'])
+        ->mapWithKeys(fn (IdfStagedUpload $upload): array => [
+          $tokenByHash[$upload->token_hash] => $upload->original_name,
+        ])
+        ->all();
+    }
+
     return view('content.dashboard.inventor.inventor-disclosure-index', [
       'page' => 'form',
+      'stagedUploadNames' => $stagedUploadNames,
     ]);
+  }
+
+  public function stageIdfUpload(Request $request): \Illuminate\Http\JsonResponse
+  {
+    $this->purgeExpiredStagedUploads();
+    $validated = $request->validate([
+      'file' => ['required', 'file', 'mimes:pdf', 'max:15360'],
+    ], [
+      'file.mimes' => 'Upload a PDF document.',
+      'file.max' => 'Each PDF must be no larger than 15 MB.',
+    ]);
+
+    $file = $validated['file'];
+    if (mb_strlen($file->getClientOriginalName()) > 255) {
+      throw ValidationException::withMessages([
+        'file' => 'The uploaded file name may not exceed 255 characters.',
+      ]);
+    }
+    $token = Str::random(64);
+    $storedPath = $file->store("idf-staging/{$request->user()->id}", 'local');
+    if (! is_string($storedPath)) {
+      throw new \RuntimeException('The PDF could not be staged for submission.');
+    }
+
+    try {
+      IdfStagedUpload::create([
+        'user_id' => $request->user()->id,
+        'token_hash' => hash('sha256', $token),
+        'stored_path' => $storedPath,
+        'original_name' => $file->getClientOriginalName(),
+        'mime_type' => 'application/pdf',
+        'size_bytes' => $file->getSize(),
+        // Extended from 2 hours: users filling the multi-page wizard
+        // could exceed the old window, causing "staged PDFs have
+        // expired" errors at submit time.
+        'expires_at' => now()->addHours(24),
+      ]);
+    } catch (Throwable $exception) {
+      $this->deleteStagedUploadFile($storedPath);
+      throw $exception;
+    }
+
+    return response()->json([
+      'token' => $token,
+      'original_name' => $file->getClientOriginalName(),
+      'size_bytes' => $file->getSize(),
+    ], 201);
+  }
+
+  public function destroyStagedIdfUpload(Request $request, string $token): \Illuminate\Http\JsonResponse
+  {
+    abort_unless(preg_match('/^[A-Za-z0-9]{64}$/', $token) === 1, 404);
+    $stagedUpload = IdfStagedUpload::query()
+      ->where('user_id', $request->user()->id)
+      ->where('token_hash', hash('sha256', $token))
+      ->firstOrFail();
+
+    if (! $this->deleteStagedUploadFile($stagedUpload->stored_path)) {
+      throw new \RuntimeException('The staged PDF could not be removed. Please try again.');
+    }
+    $stagedUpload->delete();
+
+    return response()->json(['deleted' => true]);
   }
 
   public function submissions(Request $request): View
@@ -72,7 +174,7 @@ class InnovationDisclosureController extends Controller
   {
     $ownedDisclosure = $request->user()
       ->innovationDisclosures()
-      ->with(['attachments.events', 'inventors', 'costItems', 'technologies.files'])
+      ->with(['attachments.events', 'inventors', 'costItems', 'technologies.files.versions'])
       ->findOrFail($disclosure->id);
 
     return view('content.dashboard.inventor.inventor-index', [
@@ -85,22 +187,14 @@ class InnovationDisclosureController extends Controller
   {
     return response()->json(
       $request->user()->innovationDisclosures()
-        ->with('attachments:id,innovation_disclosure_id,type,needs_revision,revision_notes,is_latest_submission,version')
+        ->with([
+          'attachments:id,innovation_disclosure_id,type,original_name,needs_revision,revision_notes,is_latest_submission,version,review_status,updated_at',
+          'technologies:id,innovation_disclosure_id,technology_title',
+          'technologies.files:id,disclosure_technology_id,original_name,review_status,updated_at',
+        ])
         ->latest()
-        ->get(['id', 'status', 'review_notes', 'updated_at'])
+        ->get(['id', 'technology_title', 'status', 'review_notes', 'updated_at'])
     );
-  }
-
-  public function destroy(Request $request, InnovationDisclosure $disclosure): RedirectResponse
-  {
-    $ownedDisclosure = $request->user()->innovationDisclosures()->findOrFail($disclosure->id);
-    $technologyTitle = $ownedDisclosure->technology_title;
-    $ownedDisclosure->delete();
-
-    return redirect()
-      ->route('dashboard.submissions.index')
-      ->with('toast_type', 'success')
-      ->with('toast_message', "{$technologyTitle} was moved to Deleted submissions. Its data and files are retained.");
   }
 
   public function downloadAttachment(
@@ -167,14 +261,63 @@ class InnovationDisclosureController extends Controller
       ->whereHas('files', fn ($query) => $query->whereKey($file->id))
       ->firstOrFail();
     $ownedFile = $technology->files()->findOrFail($file->id);
-    abort_unless(Storage::disk('local')->exists($ownedFile->stored_path), 404);
+    $isGuidancePdf = $request->boolean('guidance');
+    $storedPath = $isGuidancePdf
+      ? $ownedFile->revision_guidance_path
+      : $ownedFile->stored_path;
+    $originalName = $isGuidancePdf
+      ? $ownedFile->revision_guidance_name
+      : $ownedFile->original_name;
+    abort_unless(is_string($storedPath) && is_string($originalName), 404);
+    abort_unless(Storage::disk('local')->exists($storedPath), 404);
 
-    return response()->file(Storage::disk('local')->path($ownedFile->stored_path), [
+    $response = response()->file(Storage::disk('local')->path($storedPath), [
       'Content-Type' => 'application/pdf',
       'X-Content-Type-Options' => 'nosniff',
-    ])->setContentDisposition(
+    ]);
+    $response->headers->set('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+
+    return $response->setContentDisposition(
       ResponseHeaderBag::DISPOSITION_INLINE,
-      $ownedFile->original_name
+      $originalName
+    );
+  }
+
+  public function previewTechnologyFileVersion(
+    Request $request,
+    InnovationDisclosure $disclosure,
+    DisclosureTechnologyFile $file,
+    DisclosureTechnologyFileVersion $version
+  ): BinaryFileResponse {
+    abort_unless(
+      $request->user()->is_ip_head || $disclosure->user_id === $request->user()->id,
+      403
+    );
+    $technology = $disclosure->technologies()
+      ->whereHas('files', fn ($query) => $query->whereKey($file->id))
+      ->firstOrFail();
+    $ownedFile = $technology->files()->findOrFail($file->id);
+    $ownedVersion = $ownedFile->versions()->findOrFail($version->id);
+    $disk = Storage::disk('local');
+    $isGuidancePdf = $request->boolean('guidance');
+    $storedPath = $isGuidancePdf
+      ? $ownedVersion->revision_guidance_path
+      : $ownedVersion->stored_path;
+    $originalName = $isGuidancePdf
+      ? $ownedVersion->revision_guidance_name
+      : $ownedVersion->original_name;
+    abort_unless(is_string($storedPath) && is_string($originalName), 404);
+    abort_unless($disk->exists($storedPath), 404);
+
+    $response = response()->file($disk->path($storedPath), [
+      'Content-Type' => 'application/pdf',
+      'X-Content-Type-Options' => 'nosniff',
+    ]);
+    $response->headers->set('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+
+    return $response->setContentDisposition(
+      ResponseHeaderBag::DISPOSITION_INLINE,
+      $originalName
     );
   }
 
@@ -252,6 +395,7 @@ class InnovationDisclosureController extends Controller
             'version' => $attachment->version + 1,
             'submitted_at' => now(),
             'is_latest_submission' => true,
+            'review_status' => 'review_needed',
             'needs_revision' => false,
             'revision_notes' => null,
           ]);
@@ -264,7 +408,10 @@ class InnovationDisclosureController extends Controller
         }
         $hasRemainingRevisions = $ownedDisclosure->attachments()
           ->where('needs_revision', true)
-          ->exists();
+          ->exists()
+          || $ownedDisclosure->technologies()
+            ->whereHas('files', fn ($query) => $query->where('review_status', 'revision_requested'))
+            ->exists();
         $ownedDisclosure->update($hasRemainingRevisions
           ? ['status' => 'returned']
           : ['status' => 'revised_submission', 'review_notes' => null]);
@@ -285,15 +432,117 @@ class InnovationDisclosureController extends Controller
       ->with('toast_message', 'The revised file upload was submitted successfully.');
   }
 
+  public function storeTechnologyFileRevision(
+    Request $request,
+    InnovationDisclosure $disclosure,
+    DisclosureTechnology $technology,
+    DisclosureTechnologyFile $file
+  ): RedirectResponse {
+    $ownedDisclosure = $request->user()->innovationDisclosures()->findOrFail($disclosure->id);
+    abort_unless(
+      in_array($ownedDisclosure->status, ['submitted', 'under_review', 'returned', 'revised_submission'], true),
+      409,
+      'Files cannot be changed in the current submission status.'
+    );
+    $ownedTechnology = $ownedDisclosure->technologies()->findOrFail($technology->id);
+    $technologyFile = $ownedTechnology->files()->findOrFail($file->id);
+    abort_unless(
+      $technologyFile->review_status === 'revision_requested',
+      409,
+      'Only files marked for revision can be updated.'
+    );
+
+    $validated = $request->validate([
+      'file' => $this->attachmentRules(true),
+      'submission_note' => ['nullable', 'string', 'max:2000'],
+    ]);
+    $upload = $validated['file'];
+    $storedPath = null;
+
+    try {
+      DB::transaction(function () use ($ownedDisclosure, $ownedTechnology, $technologyFile, $upload, $validated, &$storedPath): void {
+        $lockedDisclosure = InnovationDisclosure::query()->lockForUpdate()->findOrFail($ownedDisclosure->id);
+        abort_unless(
+          in_array($lockedDisclosure->status, ['submitted', 'under_review', 'returned', 'revised_submission'], true),
+          409,
+          'Files cannot be changed in the current submission status.'
+        );
+        $lockedFile = $ownedTechnology->files()->lockForUpdate()->findOrFail($technologyFile->id);
+        abort_unless(
+          $lockedFile->review_status === 'revision_requested',
+          409,
+          'Only files marked for revision can be updated.'
+        );
+
+        $storedPath = $upload->store(
+          "innovation-disclosures/{$lockedDisclosure->id}/technologies/{$ownedTechnology->id}/{$lockedFile->narrative_key}",
+          'local'
+        );
+        if (! is_string($storedPath)) {
+          throw new \RuntimeException('The technology PDF could not be stored.');
+        }
+        $lockedFile->versions()->create([
+          'version' => $lockedFile->version,
+          'original_name' => $lockedFile->original_name,
+          'stored_path' => $lockedFile->stored_path,
+          'mime_type' => $lockedFile->mime_type,
+          'size_bytes' => $lockedFile->size_bytes,
+          'review_status' => $lockedFile->review_status,
+          'revision_notes' => $lockedFile->revision_notes,
+          'revision_guidance_path' => $lockedFile->revision_guidance_path,
+          'revision_guidance_name' => $lockedFile->revision_guidance_name,
+          'submission_note' => $lockedFile->submission_note,
+          'submitted_at' => $lockedFile->updated_at,
+        ]);
+        $lockedFile->update([
+          'original_name' => $upload->getClientOriginalName(),
+          'stored_path' => $storedPath,
+          'mime_type' => 'application/pdf',
+          'size_bytes' => $upload->getSize(),
+          'version' => $lockedFile->version + 1,
+          'review_status' => 'review_needed',
+          'revision_notes' => null,
+          'revision_guidance_path' => null,
+          'revision_guidance_name' => null,
+          'submission_note' => $validated['submission_note'] ?? null,
+        ]);
+
+        $hasRemainingRevisions = $lockedDisclosure->attachments()
+          ->where('needs_revision', true)
+          ->exists()
+          || $lockedDisclosure->technologies()
+            ->whereHas('files', fn ($query) => $query->where('review_status', 'revision_requested'))
+            ->exists();
+        $lockedDisclosure->update($hasRemainingRevisions
+          ? ['status' => 'returned']
+          : ['status' => 'revised_submission', 'review_notes' => null]);
+      });
+    } catch (Throwable $exception) {
+      if (is_string($storedPath)) {
+        Storage::disk('local')->delete($storedPath);
+      }
+      throw $exception;
+    }
+
+    return redirect()
+      ->route('dashboard.submissions.show', $ownedDisclosure)
+      ->with('toast_type', 'success')
+      ->with('toast_message', 'The revised technology file was submitted successfully.');
+  }
+
   public function updateRevisionDetails(Request $request, InnovationDisclosure $disclosure): RedirectResponse
   {
     $ownedDisclosure = $request->user()->innovationDisclosures()
       ->with(['technologies.files', 'inventors', 'costItems'])
       ->findOrFail($disclosure->id);
     abort_unless(
-      $ownedDisclosure->status === 'returned',
+      $ownedDisclosure->status === 'returned'
+        && ! $ownedDisclosure->attachments()->where('needs_revision', true)->exists()
+        && ! $ownedDisclosure->technologies()
+          ->whereHas('files', fn ($query) => $query->where('review_status', 'revision_requested'))
+          ->exists(),
       409,
-      'Submission details can only be edited when revision is requested.'
+      'Submission details can only be edited when no files are awaiting revision.'
     );
 
     $section = $request->validate([
@@ -304,41 +553,98 @@ class InnovationDisclosureController extends Controller
       $validated = $request->validate([
         'technologies' => ['required', 'array', 'min:1', 'max:2'],
         'technologies.*.technology_title' => ['required', 'string', 'max:500'],
-        'technologies.*.abstract_summary' => ['nullable', 'string'],
-        'technologies.*.technical_field' => ['nullable', 'string'],
-        'technologies.*.background_summary' => ['nullable', 'string'],
-        'technologies.*.invention_summary' => ['nullable', 'string'],
-        'technologies.*.detailed_description' => ['nullable', 'string'],
-        'technologies.*.examples_results' => ['nullable', 'string'],
       ]);
       $this->ensureExistingRowsOnly($validated['technologies'], $ownedDisclosure->technologies);
 
+      $fileRules = [];
       foreach ($ownedDisclosure->technologies as $technology) {
-        $data = $validated['technologies'][$technology->id];
-        foreach (self::TECHNOLOGY_NARRATIVES as $narrative) {
-          if (blank($data[$narrative] ?? null)
-            && ! $technology->files->contains('narrative_key', $narrative)) {
-            return back()
-              ->withErrors(["technologies.{$technology->id}.{$narrative}" => 'Enter this narrative or provide its uploaded PDF.'])
-              ->withInput();
-          }
+        foreach (self::TECHNOLOGY_FILE_KEYS as $fileKey) {
+          $hasExistingPdf = $technology->files->contains('narrative_key', $fileKey);
+          $fileRules["technologies.{$technology->id}.files.{$fileKey}"] = $this->attachmentRules(! $hasExistingPdf);
+          $fileRules["technologies.{$technology->id}.file_notes.{$fileKey}"] = ['nullable', 'string', 'max:2000'];
         }
       }
+      $validatedFiles = $request->validate($fileRules, [
+        'technologies.*.files.*.required' => 'Upload a PDF for every technology narrative.',
+        'technologies.*.files.*.mimes' => 'Technology uploads must be PDF documents.',
+      ]);
+      foreach ($validatedFiles['technologies'] ?? [] as $technologyId => $technologyFiles) {
+        $validated['technologies'][$technologyId]['files'] = $technologyFiles['files'] ?? [];
+        $validated['technologies'][$technologyId]['file_notes'] = $technologyFiles['file_notes'] ?? [];
+      }
 
-      DB::transaction(function () use ($ownedDisclosure, $validated): void {
-        foreach ($ownedDisclosure->technologies as $technology) {
-          $technology->update($validated['technologies'][$technology->id]);
-        }
-        $primaryTechnology = $ownedDisclosure->technologies->sortBy('id')->first();
-        $legacyNarratives = [];
-        foreach (self::TECHNOLOGY_NARRATIVES as $narrative) {
-          $legacyNarratives[$narrative] = $primaryTechnology->{$narrative} ?? '';
-        }
-        $ownedDisclosure->update([
-          'technology_title' => $primaryTechnology->technology_title,
-          ...$legacyNarratives,
-        ]);
-      });
+      $storedPaths = [];
+      try {
+        DB::transaction(function () use ($ownedDisclosure, $validated, &$storedPaths): void {
+          foreach ($ownedDisclosure->technologies as $technology) {
+            $technologyData = $validated['technologies'][$technology->id];
+            $technology->update([
+              'technology_title' => $technologyData['technology_title'],
+              ...array_fill_keys(self::TECHNOLOGY_NARRATIVES, ''),
+            ]);
+
+            foreach (self::TECHNOLOGY_FILE_KEYS as $fileKey) {
+              $file = $technologyData['files'][$fileKey] ?? null;
+              if (! $file instanceof UploadedFile) {
+                continue;
+              }
+              $storedPath = $file->store("innovation-disclosures/{$ownedDisclosure->id}/technologies/{$technology->id}/{$fileKey}", 'local');
+              if (! is_string($storedPath)) {
+                throw new \RuntimeException('The technology PDF could not be stored.');
+              }
+              $storedPaths[] = $storedPath;
+
+              $technologyFile = $technology->files->firstWhere('narrative_key', $fileKey);
+              if ($technologyFile) {
+                $technologyFile->versions()->create([
+                  'version' => $technologyFile->version,
+                  'original_name' => $technologyFile->original_name,
+                  'stored_path' => $technologyFile->stored_path,
+                  'mime_type' => $technologyFile->mime_type,
+                  'size_bytes' => $technologyFile->size_bytes,
+                  'review_status' => $technologyFile->review_status,
+                  'revision_notes' => $technologyFile->revision_notes,
+                  'revision_guidance_path' => $technologyFile->revision_guidance_path,
+                  'revision_guidance_name' => $technologyFile->revision_guidance_name,
+                  'submission_note' => $technologyFile->submission_note,
+                  'submitted_at' => $technologyFile->updated_at,
+                ]);
+                $technologyFile->update([
+                  'original_name' => $file->getClientOriginalName(),
+                  'stored_path' => $storedPath,
+                  'mime_type' => 'application/pdf',
+                  'size_bytes' => $file->getSize(),
+                  'version' => $technologyFile->version + 1,
+                  'review_status' => 'review_needed',
+                  'revision_notes' => null,
+                  'revision_guidance_path' => null,
+                  'revision_guidance_name' => null,
+                  'submission_note' => $technologyData['file_notes'][$fileKey] ?? null,
+                ]);
+              } else {
+                $technology->files()->create([
+                  'narrative_key' => $fileKey,
+                  'original_name' => $file->getClientOriginalName(),
+                  'stored_path' => $storedPath,
+                  'mime_type' => 'application/pdf',
+                  'size_bytes' => $file->getSize(),
+                  'review_status' => 'review_needed',
+                  'submission_note' => $technologyData['file_notes'][$fileKey] ?? null,
+                ]);
+              }
+            }
+          }
+          $primaryTechnology = $ownedDisclosure->technologies->sortBy('id')->first();
+          $ownedDisclosure->update([
+            'technology_title' => $validated['technologies'][$primaryTechnology->id]['technology_title'],
+            ...array_fill_keys(self::TECHNOLOGY_NARRATIVES, ''),
+          ]);
+        });
+      } catch (Throwable $error) {
+        Storage::disk('local')->delete($storedPaths);
+        throw $error;
+      }
+
     } elseif ($section === 'inventors') {
       $natureOptions = [
         'conception',
@@ -364,9 +670,6 @@ class InnovationDisclosureController extends Controller
         'inventors.*.contribution_nature' => ['required', 'array', 'min:1'],
         'inventors.*.contribution_nature.*' => ['required', Rule::in($natureOptions)],
         'inventors.*.contribution_other' => ['nullable', 'string', 'max:500'],
-        'inventors.*.signature_name' => ['required', 'string', 'max:255'],
-        'inventors.*.declaration_confirmed' => ['required', 'accepted'],
-        'inventors.*.declaration_date' => ['required', 'date'],
       ]);
       $this->ensureExistingRowsOnly($validated['inventors'], $ownedDisclosure->inventors);
 
@@ -453,6 +756,9 @@ class InnovationDisclosureController extends Controller
 
   public function store(Request $request): RedirectResponse
   {
+    $this->purgeExpiredStagedUploads();
+    $stagedUploads = $this->resolveStagedIdfUploads($request);
+
     $materials = $request->input('materials');
     if (is_array($materials)) {
       $request->merge([
@@ -510,7 +816,7 @@ class InnovationDisclosureController extends Controller
       'funding_source' => ['required', 'string', 'max:500'],
       'date_of_creation' => ['required', 'date'],
       'research_approval_date' => ['required', 'date'],
-      'technology_type' => ['required', Rule::in(['mechanical_engineering', 'chemical'])],
+      'technology_type' => ['required', Rule::in(['mechanical', 'chemical'])],
       'technologies' => ['required', 'array', 'min:1', 'max:2'],
       'technologies.*.technology_title' => ['required', 'string', 'max:500'],
       'file_drive_link' => ['nullable', 'url', 'max:2048'],
@@ -535,9 +841,6 @@ class InnovationDisclosureController extends Controller
         'string',
         'max:500',
       ],
-      'inventors.*.signature_name' => ['required', 'string', 'max:255'],
-      'inventors.*.declaration_confirmed' => ['required', 'accepted'],
-      'inventors.*.declaration_date' => ['required', 'date'],
       'materials' => ['sometimes', 'array', 'max:100'],
       'materials.*.item' => ['required', 'string', 'max:255'],
       'materials.*.description' => ['required', 'string', 'max:2000'],
@@ -553,44 +856,26 @@ class InnovationDisclosureController extends Controller
         ...$this->attachmentRules(false),
         Rule::requiredIf($inventorCount > 6),
       ],
-      'attachments.sample_photo' => $this->attachmentRules(true),
+      'attachments.sample_photo' => $this->attachmentRules(false),
       'attachments.drawings' => $this->attachmentRules(false),
       'attachments.methodology' => $this->attachmentRules(),
       'attachments.assistance_form' => $this->attachmentRules(),
     ];
     foreach (self::TECHNOLOGY_NARRATIVES as $narrative) {
-      $rules["technologies.*.{$narrative}"] = ['nullable', 'string'];
-      $rules["technologies.*.files.{$narrative}"] = [
-        'nullable',
-        'file',
-        'mimes:pdf',
-        'max:15360',
-        function (string $attribute, mixed $file, \Closure $fail): void {
-          if ($file instanceof UploadedFile && mb_strlen($file->getClientOriginalName()) > 255) {
-            $fail('The uploaded file name may not exceed 255 characters.');
-          }
-        },
-      ];
+      $rules["technologies.*.files.{$narrative}"] = $this->attachmentRules(true);
+    }
+    foreach (self::TECHNOLOGY_REQUIRED_FILES as $fileKey) {
+      $rules["technologies.*.files.{$fileKey}"] = $this->attachmentRules(true);
     }
     $validated = $request->validate($rules, [
       'attachments.*.mimes' => 'All uploaded files must be PDF documents.',
-      'technologies.*.files.*.mimes' => 'Narrative uploads must be PDF documents.',
-      'attachments.sample_photo.required' => 'Upload a PDF containing the product sample photo.',
+      'technologies.*.files.*.mimes' => 'Technology uploads must be PDF documents.',
+      'technologies.*.files.*.required' => 'Upload a PDF for every required technology document.',
+      'technologies.*.files.sample_photo.required' => 'Upload a sample picture PDF for each technology.',
+      'technologies.*.files.technical_drawing.required' => 'Upload a technical drawing PDF for each technology.',
       'attachments.deed_assignment.required' => 'Upload the signed Deed of Assignment for an assignment to SLSU.',
       'attachments.additional_signed_sheet.required' => 'For more than six creators, upload an additional signed creator sheet as a PDF.',
     ]);
-
-    foreach ($validated['technologies'] as $technologyIndex => $technology) {
-      foreach (self::TECHNOLOGY_NARRATIVES as $narrative) {
-        $text = trim((string) ($technology[$narrative] ?? ''));
-        $file = $technology['files'][$narrative] ?? null;
-        if ($text === '' && ! $file instanceof UploadedFile) {
-          return back()
-            ->withErrors(["technologies.{$technologyIndex}.{$narrative}" => 'Enter this narrative or upload its PDF.'])
-            ->withInput();
-        }
-      }
-    }
 
     $contributionTotal = round(array_sum(array_map(
       static fn (array $inventor): float => (float) $inventor['contribution_percent'],
@@ -645,7 +930,7 @@ class InnovationDisclosureController extends Controller
         $primaryTechnology = $technologies[0];
         $legacyNarratives = [];
         foreach (self::TECHNOLOGY_NARRATIVES as $field) {
-          $legacyNarratives[$field] = $primaryTechnology[$field] ?? '';
+          $legacyNarratives[$field] = '';
         }
 
         $disclosure = $request->user()->innovationDisclosures()->create([
@@ -670,19 +955,18 @@ class InnovationDisclosureController extends Controller
         foreach ($technologies as $technologyData) {
           $technology = $disclosure->technologies()->create([
             'technology_title' => $technologyData['technology_title'],
-            ...array_intersect_key($technologyData, array_flip(self::TECHNOLOGY_NARRATIVES)),
           ]);
-          foreach (self::TECHNOLOGY_NARRATIVES as $narrative) {
-            $file = $technologyData['files'][$narrative] ?? null;
+          foreach ([...self::TECHNOLOGY_NARRATIVES, ...self::TECHNOLOGY_REQUIRED_FILES] as $fileKey) {
+            $file = $technologyData['files'][$fileKey] ?? null;
             if (! $file instanceof UploadedFile) {
               continue;
             }
-            $storedPath = $file->store("{$storageDirectory}/technologies/{$technology->id}/{$narrative}", 'local');
+            $storedPath = $file->store("{$storageDirectory}/technologies/{$technology->id}/{$fileKey}", 'local');
             if (! is_string($storedPath)) {
-              throw new \RuntimeException('The technology narrative PDF could not be stored.');
+              throw new \RuntimeException('The technology PDF could not be stored.');
             }
             $technology->files()->create([
-              'narrative_key' => $narrative,
+              'narrative_key' => $fileKey,
               'original_name' => $file->getClientOriginalName(),
               'stored_path' => $storedPath,
               'mime_type' => 'application/pdf',
@@ -730,6 +1014,8 @@ class InnovationDisclosureController extends Controller
             'mime_type' => $file->getMimeType(),
             'size_bytes' => $file->getSize(),
             'version' => 1,
+            'is_latest_submission' => true,
+            'review_status' => 'review_needed',
           ]);
           $attachment->events()->create([
             'event_type' => 'uploaded',
@@ -745,6 +1031,11 @@ class InnovationDisclosureController extends Controller
       }
 
       throw $exception;
+    }
+
+    foreach ($stagedUploads as $stagedUpload) {
+      $this->deleteStagedUploadFile($stagedUpload->stored_path);
+      $stagedUpload->delete();
     }
 
     return redirect()
@@ -766,6 +1057,129 @@ class InnovationDisclosureController extends Controller
         }
       },
     ];
+  }
+
+  private function resolveStagedIdfUploads(Request $request): \Illuminate\Database\Eloquent\Collection
+  {
+    $tokens = $request->input('idf_upload_tokens', []);
+    if (! is_array($tokens)) {
+      throw ValidationException::withMessages([
+        'idf_upload_tokens' => 'The staged PDF upload data is invalid. Please select the PDFs again.',
+      ]);
+    }
+
+    $tokenMap = [];
+    if (array_diff(array_keys($tokens), ['attachments', 'technologies']) !== []) {
+      throw ValidationException::withMessages(['idf_upload_tokens' => 'The staged PDF upload data is invalid.']);
+    }
+    if (! is_array($tokens['attachments'] ?? [])) {
+      throw ValidationException::withMessages(['idf_upload_tokens' => 'The staged attachment data is invalid.']);
+    }
+    foreach ($tokens['attachments'] ?? [] as $key => $token) {
+      if (! in_array($key, ['deed_assignment', 'additional_signed_sheet', 'sample_photo', 'drawings', 'methodology', 'assistance_form'], true)) {
+        throw ValidationException::withMessages(['idf_upload_tokens' => 'An unrecognized staged attachment was submitted.']);
+      }
+      $tokenMap[] = ['type' => 'attachment', 'key' => $key, 'technology' => null, 'token' => $token];
+    }
+    if (! is_array($tokens['technologies'] ?? [])) {
+      throw ValidationException::withMessages(['idf_upload_tokens' => 'The staged technology PDF data is invalid.']);
+    }
+    foreach ($tokens['technologies'] ?? [] as $index => $technologyTokens) {
+      if (! in_array((string) $index, ['0', '1'], true) || ! is_array($technologyTokens)) {
+        throw ValidationException::withMessages(['idf_upload_tokens' => 'The staged technology PDF data is invalid.']);
+      }
+      foreach ($technologyTokens as $key => $token) {
+        if (! in_array($key, self::TECHNOLOGY_FILE_KEYS, true)) {
+          throw ValidationException::withMessages(['idf_upload_tokens' => 'An unrecognized technology PDF was submitted.']);
+        }
+        $tokenMap[] = ['type' => 'technology', 'key' => $key, 'technology' => (int) $index, 'token' => $token];
+      }
+    }
+
+    foreach ($tokenMap as $entry) {
+      if (! is_string($entry['token']) || preg_match('/^[A-Za-z0-9]{64}$/', $entry['token']) !== 1) {
+        throw ValidationException::withMessages([
+          'idf_upload_tokens' => 'One or more staged PDFs are invalid. Please select those files again.',
+        ]);
+      }
+    }
+
+    if ($tokenMap === []) {
+      return new \Illuminate\Database\Eloquent\Collection();
+    }
+
+    $hashes = array_map(static fn (array $entry): string => hash('sha256', $entry['token']), $tokenMap);
+    $stagedUploads = IdfStagedUpload::query()
+      ->where('user_id', $request->user()->id)
+      ->whereIn('token_hash', $hashes)
+      ->where('expires_at', '>', now())
+      ->get()
+      ->keyBy('token_hash');
+
+    if ($stagedUploads->count() !== count($tokenMap)) {
+      throw ValidationException::withMessages([
+        'idf_upload_tokens' => 'One or more staged PDFs have expired. Please select those files again.',
+      ]);
+    }
+
+    $files = $request->files->all();
+    $attachmentFiles = $files['attachments'] ?? [];
+    $technologyFiles = $files['technologies'] ?? [];
+    foreach ($tokenMap as $entry) {
+      $hash = hash('sha256', $entry['token']);
+      $stagedUpload = $stagedUploads->get($hash);
+      $path = Storage::disk('local')->path($stagedUpload->stored_path);
+      if (! is_file($path)) {
+        throw ValidationException::withMessages([
+          'idf_upload_tokens' => 'A staged PDF is no longer available. Please select that file again.',
+        ]);
+      }
+      $uploadedFile = new UploadedFile(
+        $path,
+        $stagedUpload->original_name,
+        $stagedUpload->mime_type,
+        UPLOAD_ERR_OK,
+        true
+      );
+      if ($entry['type'] === 'attachment') {
+        $attachmentFiles[$entry['key']] = $uploadedFile;
+      } else {
+        $technologyFiles[$entry['technology']]['files'][$entry['key']] = $uploadedFile;
+      }
+    }
+
+    $files['attachments'] = $attachmentFiles;
+    $files['technologies'] = $technologyFiles;
+    $request->files->replace($files);
+
+    return $stagedUploads;
+  }
+
+  private function purgeExpiredStagedUploads(): void
+  {
+    IdfStagedUpload::query()
+      ->where('expires_at', '<=', now())
+      ->chunkById(100, function ($stagedUploads): void {
+        foreach ($stagedUploads as $stagedUpload) {
+          $this->deleteStagedUploadFile($stagedUpload->stored_path);
+          $stagedUpload->delete();
+        }
+      });
+  }
+
+  private function deleteStagedUploadFile(string $path): bool
+  {
+    $disk = Storage::disk('local');
+    if (! $disk->exists($path)) {
+      return true;
+    }
+    if ($disk->delete($path)) {
+      return true;
+    }
+
+    report(new \RuntimeException("The staged IDF PDF could not be removed: {$path}"));
+
+    return false;
   }
 
   private function ensureExistingRowsOnly(array $submittedRows, \Illuminate\Database\Eloquent\Collection $existingRows): void

@@ -6,7 +6,11 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\InvalidStateException;
 
 class AuthController extends Controller
 {
@@ -50,6 +54,86 @@ class AuthController extends Controller
     public function showSignin()
     {
         return view('personal_layouts.login');
+    }
+
+    public function redirectToGoogle()
+    {
+        if (! filled(config('services.google.client_id')) || ! filled(config('services.google.client_secret'))) {
+            return redirect()->route('login')
+                ->with('toast_type', 'error')
+                ->with('toast_message', 'Google sign-in is not configured. Please contact the site administrator.');
+        }
+
+        return Socialite::driver('google')->redirect();
+    }
+
+    public function handleGoogleCallback(Request $request)
+    {
+        if ($request->filled('error')) {
+            return redirect()->route('login')
+                ->with('toast_type', 'error')
+                ->with('toast_message', 'Google sign-in was cancelled.');
+        }
+
+        try {
+            $googleUser = Socialite::driver('google')->user();
+        } catch (InvalidStateException $exception) {
+            Log::warning('Google sign-in callback rejected due to invalid OAuth state.', [
+                'exception' => $exception,
+            ]);
+
+            return redirect()->route('login')
+                ->with('toast_type', 'error')
+                ->with('toast_message', 'Google sign-in could not be verified. Please try again.');
+        }
+
+        $email = $googleUser->getEmail();
+        $googleData = $googleUser->getRaw();
+        $emailVerified = filter_var(
+            $googleData['email_verified'] ?? $googleData['verified_email'] ?? false,
+            FILTER_VALIDATE_BOOLEAN
+        );
+
+        if (! $email || ! filter_var($email, FILTER_VALIDATE_EMAIL) || ! $emailVerified) {
+            return redirect()->route('login')
+                ->with('toast_type', 'error')
+                ->with('toast_message', 'Google did not provide a verified email address.');
+        }
+
+        $normalizedEmail = mb_strtolower($email);
+        $isIpHead = str_ends_with($normalizedEmail, '@southernleytestateu.edu.ph');
+        $user = User::query()
+            ->whereRaw('LOWER(email) = ?', [$normalizedEmail])
+            ->first();
+
+        if (! $user) {
+            $name = trim((string) $googleUser->getName()) ?: Str::before($normalizedEmail, '@');
+            $usernameBase = Str::slug($name) ?: 'google-user';
+            $usernameBase = mb_substr($usernameBase, 0, 240);
+
+            do {
+                $username = $usernameBase.'-'.Str::lower(Str::random(8));
+            } while (User::query()->where('username', $username)->exists());
+
+            $user = User::create([
+                'name' => $name,
+                'email' => $normalizedEmail,
+                'username' => $username,
+                'password' => Str::random(64),
+                'email_verified_at' => now(),
+            ]);
+        }
+
+        if ($isIpHead && ! $user->is_ip_head) {
+            $user->forceFill(['is_ip_head' => true])->save();
+        }
+
+        Auth::login($user);
+        $request->session()->regenerate();
+        $request->session()->flash('toast_type', 'success');
+        $request->session()->flash('toast_message', 'Signed in with Google successfully. Redirecting to your workspace...');
+
+        return redirect()->route($user->is_ip_head ? 'ip-head-dashboard.index' : 'dashboard-analytics');
     }
 
     public function login(Request $request)

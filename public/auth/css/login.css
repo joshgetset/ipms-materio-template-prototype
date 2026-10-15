@@ -671,6 +671,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 12px;
+  text-decoration: none;
   background: #ffffff;
   border: 1.5px solid var(--input-border);
   border-radius: 12px;

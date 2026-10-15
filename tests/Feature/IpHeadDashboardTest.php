@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\InnovationDisclosure;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -17,9 +18,35 @@ class IpHeadDashboardTest extends TestCase
 
   public function test_only_ip_heads_can_access_the_review_dashboard_and_update_reviews(): void
   {
+    Storage::fake('local');
     $submitter = $this->makeUser('submitter');
     $ipHead = $this->makeUser('ip-head', true);
     $disclosure = $this->makeDisclosure($submitter);
+    $disclosure->update(['lead_creator_name' => 'Conflicting legacy lead']);
+    $disclosure->inventors()->create([
+      'first_name' => 'Jane',
+      'last_name' => 'Creator',
+      'email' => 'jane.creator@example.com',
+      'country_of_citizenship' => 'Philippines',
+      'affiliation' => 'student',
+      'technical_contribution' => 'Prototype development',
+      'contribution_percent' => '100.00',
+      'is_primary' => true,
+      'declaration_confirmed' => true,
+    ]);
+    $technology = $disclosure->technologies()->create([
+      'technology_title' => 'Water filtration patent',
+      'background_summary' => 'Background summary',
+    ]);
+    $narrativePdf = UploadedFile::fake()->create('water-filter-abstract.pdf', 5, 'application/pdf');
+    $storedPath = $narrativePdf->store("innovation-disclosures/{$disclosure->id}/technologies/{$technology->id}/abstract_summary", 'local');
+    $technologyFile = $technology->files()->create([
+      'narrative_key' => 'abstract_summary',
+      'original_name' => 'water-filter-abstract.pdf',
+      'stored_path' => $storedPath,
+      'mime_type' => 'application/pdf',
+      'size_bytes' => 5120,
+    ]);
     $reviewedDisclosure = $this->makeDisclosure($submitter);
     $reviewedDisclosure->update(['status' => 'endorsed']);
 
@@ -45,7 +72,12 @@ class IpHeadDashboardTest extends TestCase
       ->get(route('ip-head-dashboard.index'))
       ->assertOk()
       ->assertSee('IP Head Dashboard')
+      ->assertSee('ipms-dashboard-footer', false)
+      ->assertSee('Intellectual Property Management System')
+      ->assertDontSee('made with ❤️ by')
+      ->assertDontSee('Admin Templates')
       ->assertSee('href="' . route('ip-head-dashboard.index') . '"', false)
+      ->assertDontSee('data-submission-notifications', false)
       ->assertSee('<span class="menu-header-text">IP Head</span>', false)
       ->assertDontSee('Inventors')
       ->assertDontSee('<h4 class="mb-3">IP Head Dashboard</h4>', false)
@@ -81,68 +113,160 @@ class IpHeadDashboardTest extends TestCase
       ->assertSee('data-review-section="inventors"', false)
       ->assertSee('data-review-section="technologies"', false)
       ->assertSee('data-review-section="costing"', false)
-      ->assertSee('data-review-section="files"', false)
-      ->assertSee('data-review-section="decision"', false)
+      ->assertDontSee('data-review-section="files"', false)
+      ->assertSee('data-review-section="approval"', false)
       ->assertSee('Creators and contributions')
-      ->assertSee('Supporting files')
-      ->assertSee('Review decision')
-      ->assertSee('ri-file-list-3-line', false)
-      ->assertSee('ri-team-line', false)
-      ->assertSee('ri-attachment-2', false)
-      ->assertSee('ri-checkbox-circle-line', false)
+      ->assertDontSee('Supporting files')
+      ->assertSeeInOrder(['Creators and contributions', 'Costing of materials and resources', 'Technologies in this submission'])
+      ->assertSee('data-review-table data-page-size="4" data-disable-inactive', false)
+      ->assertSee('technology-review-card__title')
+      ->assertSee('data-open-technology-files=', false)
+      ->assertSee('data-close-technology-files=', false)
+      ->assertSee('Back to technologies')
+      ->assertSee('Description Documents')
+      ->assertDontSee('<thead><tr><th scope="col">Files</th>', false)
+      ->assertSee('Submission approval')
+      ->assertDontSee('submission-review-nav', false)
       ->assertSee('Back to submissions')
       ->assertSee('Submission overview')
       ->assertSee('Low-cost water filtration device')
-      ->assertSee('Background summary')
+      ->assertSee('water-filter-abstract.pdf')
+      ->assertSee('data-ip-head-technology-review', false)
+      ->assertSee('ip-head-technology-review-actions__trigger')
+      ->assertSee('ri-more-2-fill')
+      ->assertSee('data-file-preview-url=', false)
+      ->assertSee('/technology-files/', false)
+      ->assertSee('data-file-version="1"', false)
+      ->assertSee('data-file-category="Abstract / Summary"', false)
+      ->assertDontSee('ip-head-file-version-flag')
+      ->assertSee('Review file')
+      ->assertDontSee('target="_blank" rel="noopener noreferrer"', false)
+      ->assertSee('Review Needed')
+      ->assertSee('name="technology_files[' . $technologyFile->id . '][status]"', false)
+      ->assertDontSee('Background summary')
       ->assertSee('Research title')
-      ->assertSee('Overview')
-      ->assertSee('Technologies')
+      ->assertSee('Submission overview')
+      ->assertDontSee('>Overview</h4>', false)
+      ->assertDontSee('Submission details at a glance')
+      ->assertSee('ip-head-review-stats')
+      ->assertSee("Est. dev't cost", false)
+      ->assertSee('Disclosure and contact')
+      ->assertSee('Research and ownership')
+      ->assertSee('submission-review-groups')
+      ->assertSee('Technologies in this submission')
       ->assertSee('Costing')
+      ->assertSee('Documents')
+      ->assertSee('Important dates')
+      ->assertSee('creator-allocation')
+      ->assertSee('ip-head-creator-row')
+      ->assertSee('Jane Creator')
+      ->assertDontSee('Conflicting legacy lead')
+      ->assertSee('Prototype development')
+      ->assertSee('Total: ₱')
       ->assertDontSee('Contact email')
       ->assertDontSee('Mobile number')
       ->assertDontSee('disabled readonly', false)
-      ->assertSee('Substantial SLSU support')
+      ->assertSee('SLSU support')
       ->assertSee('Ownership consent')
-      ->assertSee('ip-head-review-form')
-      ->assertDontSee('data-save-as-xml', false)
-      ->assertDontSee('class="modal fade"', false);
+      ->assertSee('ip-head-approval-form')
+      ->assertDontSee('data-save-as-xml', false);
   }
 
-  public function test_ip_head_revision_notes_and_endorsement_update_submitter_status(): void
+  public function test_ip_head_technology_cards_are_paginated_in_groups_of_four(): void
+  {
+    $submitter = $this->makeUser('technology-card-owner');
+    $ipHead = $this->makeUser('technology-card-ip-head', true);
+    $disclosure = $this->makeDisclosure($submitter);
+
+    foreach (range(1, 5) as $number) {
+      $disclosure->technologies()->create([
+        'technology_title' => "Technology {$number}",
+      ]);
+    }
+
+    $response = $this->actingAs($ipHead)
+      ->get(route('ip-head-dashboard.disclosures.show', $disclosure))
+      ->assertOk()
+      ->assertSee('data-page-size="4"', false)
+      ->assertSee('Technology card pagination');
+
+    $this->assertSame(5, substr_count($response->getContent(), 'data-technology-card'));
+  }
+
+  public function test_ip_head_can_approve_a_submission_after_every_file_is_approved(): void
   {
     $submitter = $this->makeUser('submitter');
     $ipHead = $this->makeUser('ip-head', true);
     $disclosure = $this->makeDisclosure($submitter);
+    $technology = $disclosure->technologies()->create(['technology_title' => 'Approved technology']);
+    $technology->files()->create([
+      'narrative_key' => 'abstract_summary',
+      'original_name' => 'abstract.pdf',
+      'stored_path' => "innovation-disclosures/{$disclosure->id}/abstract.pdf",
+      'mime_type' => 'application/pdf',
+      'size_bytes' => 1024,
+      'review_status' => 'accepted',
+    ]);
+    $disclosure->attachments()->create([
+      'type' => 'methodology',
+      'original_name' => 'methodology.pdf',
+      'stored_path' => "innovation-disclosures/{$disclosure->id}/methodology.pdf",
+      'mime_type' => 'application/pdf',
+      'size_bytes' => 1024,
+      'review_status' => 'review_needed',
+      'is_latest_submission' => true,
+    ]);
+    $duplicateAttachment = $disclosure->attachments()->create([
+      'type' => 'sample_photo',
+      'original_name' => 'abstract.pdf',
+      'stored_path' => "innovation-disclosures/{$disclosure->id}/sample-photo/abstract.pdf",
+      'mime_type' => 'application/pdf',
+      'size_bytes' => 1024,
+      'review_status' => 'review_needed',
+      'is_latest_submission' => true,
+    ]);
 
     $this->actingAs($ipHead)
-      ->post(route('ip-head-dashboard.review', $disclosure), [
-        'status' => 'returned',
-      ])
-      ->assertSessionHasErrors('review_notes');
-
-    $this->actingAs($ipHead)
-      ->post(route('ip-head-dashboard.review', $disclosure), [
-        'status' => 'returned',
-        'review_notes' => 'Please provide a clearer drawing of the filter housing.',
-      ])
-      ->assertRedirect(route('ip-head-dashboard.submissions', ['queue' => 'for-review']))
-      ->assertSessionHas('toast_type', 'success');
-
-    $disclosure->refresh();
-    $this->assertSame('returned', $disclosure->status);
-    $this->assertSame('Please provide a clearer drawing of the filter housing.', $disclosure->review_notes);
-
-    $this->actingAs($submitter)
-      ->get(route('dashboard.submissions.status-updates'))
+      ->get(route('ip-head-dashboard.disclosures.show', $disclosure))
       ->assertOk()
-      ->assertJsonPath('0.status', 'returned')
-      ->assertJsonPath('0.review_notes', 'Please provide a clearer drawing of the filter housing.');
+      ->assertSee('abstract.pdf')
+      ->assertDontSee('name="attachments[' . $duplicateAttachment->id . '][status]"', false)
+      ->assertSee('name="attachments[' . $disclosure->attachments()->where('original_name', 'methodology.pdf')->value('id') . '][status]"', false)
+      ->assertSee('<button class="btn btn-primary" type="submit" disabled', false);
 
     $this->actingAs($ipHead)
-      ->post(route('ip-head-dashboard.review', $disclosure), [
+      ->postJson(route('ip-head-dashboard.disclosures.attachments.review', $disclosure), [
+        'attachments' => [
+          $disclosure->attachments()->first()->id => ['status' => 'accepted'],
+        ],
+      ])
+      ->assertOk()
+      ->assertJsonPath('reviewed_count', 1);
+
+    $this->assertDatabaseHas('disclosure_attachments', [
+      'innovation_disclosure_id' => $disclosure->id,
+      'review_status' => 'accepted',
+      'is_latest_submission' => true,
+    ]);
+    $this->assertDatabaseHas('disclosure_attachments', [
+      'id' => $duplicateAttachment->id,
+      'review_status' => 'review_needed',
+      'is_latest_submission' => true,
+    ]);
+
+    $this->actingAs($ipHead)
+      ->get(route('ip-head-dashboard.disclosures.show', $disclosure))
+      ->assertOk()
+      ->assertSee('<button class="btn btn-primary" type="submit" ', false)
+      ->assertDontSee('<button class="btn btn-primary" type="submit" disabled', false);
+
+    $this->actingAs($ipHead)
+      ->postJson(route('ip-head-dashboard.review', $disclosure), [
         'status' => 'endorsed',
       ])
-      ->assertRedirect(route('ip-head-dashboard.submissions', ['queue' => 'for-review']));
+      ->assertOk()
+      ->assertJsonPath('message', 'The submitted IDF has been approved.')
+      ->assertJsonPath('disclosure.status', 'endorsed');
 
     $this->assertDatabaseHas('innovation_disclosures', [
       'id' => $disclosure->id,
@@ -152,7 +276,7 @@ class IpHeadDashboardTest extends TestCase
     $this->assertNotNull($disclosure->refresh()->endorsed_at);
   }
 
-  public function test_submission_with_file_revisions_cannot_be_endorsed(): void
+  public function test_submission_with_unapproved_files_cannot_be_approved(): void
   {
     $submitter = $this->makeUser('pending-revision-owner');
     $ipHead = $this->makeUser('pending-revision-ip-head', true);
@@ -170,7 +294,8 @@ class IpHeadDashboardTest extends TestCase
     $this->actingAs($ipHead)
       ->get(route('ip-head-dashboard.disclosures.show', $disclosure))
       ->assertOk()
-      ->assertSee('data-has-pending-file-revisions="true"', false);
+      ->assertSee('Approve submitted IDF')
+      ->assertSee('<button class="btn btn-primary" type="submit" disabled', false);
 
     $this->actingAs($ipHead)
       ->postJson(route('ip-head-dashboard.review', $disclosure), [
@@ -178,7 +303,7 @@ class IpHeadDashboardTest extends TestCase
       ])
       ->assertUnprocessable()
       ->assertJsonValidationErrors([
-        'status' => 'This submission cannot be endorsed while any files still need revision.',
+        'status' => 'Approve every current submitted file before approving this submission.',
       ]);
 
     $this->assertDatabaseHas('innovation_disclosures', [
@@ -219,6 +344,8 @@ class IpHeadDashboardTest extends TestCase
       'stored_path' => 'innovation-disclosures/1/methodology/methodology.pdf',
       'mime_type' => 'application/pdf',
       'size_bytes' => 2048,
+      'is_latest_submission' => true,
+      'is_latest_submission' => true,
     ]);
     $disclosure->attachments()->create([
       'type' => 'drawings',
@@ -280,24 +407,32 @@ class IpHeadDashboardTest extends TestCase
     $this->actingAs($ipHead)->get($route)->assertStatus(409);
   }
 
-  public function test_ip_head_revision_notes_ajax_request_returns_json_instead_of_redirecting(): void
+  public function test_ip_head_approval_request_returns_json(): void
   {
     $submitter = $this->makeUser('ajax-submit-owner');
     $ipHead = $this->makeUser('ajax-ip-head', true);
     $disclosure = $this->makeDisclosure($submitter);
+    $disclosure->attachments()->create([
+      'type' => 'methodology',
+      'original_name' => 'methodology.pdf',
+      'stored_path' => "innovation-disclosures/{$disclosure->id}/methodology.pdf",
+      'mime_type' => 'application/pdf',
+      'size_bytes' => 1024,
+      'review_status' => 'accepted',
+      'is_latest_submission' => true,
+    ]);
 
     $this->actingAs($ipHead)
       ->postJson(route('ip-head-dashboard.review', $disclosure), [
-        'status' => 'returned',
-        'review_notes' => 'Please clarify the proposed changes.',
+        'status' => 'endorsed',
         'queue' => 'for-review',
         'page' => 1,
       ])
       ->assertOk()
-      ->assertJsonPath('message', 'Disclosure review updated.')
+      ->assertJsonPath('message', 'The submitted IDF has been approved.')
       ->assertJsonPath('disclosure.id', $disclosure->id)
-      ->assertJsonPath('disclosure.status', 'returned')
-      ->assertJsonPath('disclosure.review_notes', 'Please clarify the proposed changes.');
+      ->assertJsonPath('disclosure.status', 'endorsed')
+      ->assertJsonPath('disclosure.review_notes', null);
   }
 
   public function test_ip_head_can_request_revision_for_a_specific_file_and_submitter_can_see_it(): void
@@ -336,17 +471,20 @@ class IpHeadDashboardTest extends TestCase
 
     $reviewPage
       ->assertOk()
-      ->assertSee('Supporting files')
       ->assertSee('drawing.pdf')
+      ->assertSee('detail.jpg')
+      ->assertSee('Preview')
+      ->assertSee('class="dropdown review-files-actions"', false)
+      ->assertSee('ri-more-2-fill', false)
       ->assertSee('class="btn btn-primary ip-head-file-card__save" type="submit" disabled', false)
       ->assertSee(
         'action="' . route('ip-head-dashboard.disclosures.attachments.review', $disclosure) . '"',
         false
       )
-      ->assertSee('Latest')
+      ->assertSee('Review Needed')
       ->assertSee('ip-head-file-card--revised', false)
-      ->assertSee('data-bs-target="#attachment-preview-' . $attachment->id . '"', false)
-      ->assertSee('data-bs-target="#attachment-preview-' . $imageAttachment->id . '"', false)
+      ->assertSee('data-bs-target="#attachment-preview-fallback-' . $attachment->id . '"', false)
+      ->assertSee('data-bs-target="#attachment-preview-fallback-' . $imageAttachment->id . '"', false)
       ->assertSee(
         'src="' . route('ip-head-dashboard.attachments.preview', [$disclosure, $attachment]) . '"',
         false
@@ -416,13 +554,11 @@ class IpHeadDashboardTest extends TestCase
     $this->actingAs($ipHead)
       ->get(route('ip-head-dashboard.disclosures.show', $disclosure))
       ->assertOk()
-      ->assertSee('name="attachments[' . $attachment->id . '][needs_revision]"', false)
-      ->assertSee('data-attachment-id="' . $attachment->id . '"', false)
-      ->assertSee('checked', false)
+      ->assertSee('Rejected')
       ->assertSee('disabled', false)
       ->assertSee('Upload a higher-resolution drawing.')
       ->assertSee($attachment->submitted_at->format('M j, Y'))
-      ->assertSee('Revision requested');
+      ->assertSee('Rejected');
 
     $this->actingAs($submitter)
       ->get(route('dashboard.submissions.status-updates'))
@@ -478,17 +614,18 @@ class IpHeadDashboardTest extends TestCase
       'stored_path' => "innovation-disclosures/{$disclosure->id}/methodology/methodology.pdf",
       'mime_type' => 'application/pdf',
       'size_bytes' => 2048,
+      'is_latest_submission' => true,
     ]);
 
     $this->actingAs($ipHead)
       ->postJson(route('ip-head-dashboard.disclosures.attachments.review', $disclosure), [
         'attachments' => [
           $drawing->id => [
-            'needs_revision' => '1',
+            'status' => 'revision_requested',
             'revision_notes' => 'Clarify the labels.',
           ],
           $methodology->id => [
-            'needs_revision' => '1',
+            'status' => 'revision_requested',
             'revision_notes' => 'Add a materials list.',
           ],
         ],
@@ -504,6 +641,135 @@ class IpHeadDashboardTest extends TestCase
     $this->assertFalse($drawing->is_latest_submission);
     $this->assertTrue($methodology->needs_revision);
     $this->assertSame('Add a materials list.', $methodology->revision_notes);
+  }
+
+  public function test_ip_head_can_set_technology_file_review_statuses(): void
+  {
+    $submitter = $this->makeUser('technology-file-owner');
+    $ipHead = $this->makeUser('technology-file-reviewer', true);
+    $disclosure = $this->makeDisclosure($submitter);
+    $technology = $disclosure->technologies()->create([
+      'technology_title' => 'Community water filter',
+    ]);
+    $file = $technology->files()->create([
+      'narrative_key' => 'abstract_summary',
+      'original_name' => 'abstract.pdf',
+      'stored_path' => "innovation-disclosures/{$disclosure->id}/technologies/{$technology->id}/abstract.pdf",
+      'mime_type' => 'application/pdf',
+      'size_bytes' => 1024,
+      'version' => 2,
+    ]);
+    $file->versions()->create([
+      'version' => 1,
+      'original_name' => 'abstract-v1.pdf',
+      'stored_path' => "innovation-disclosures/{$disclosure->id}/technologies/{$technology->id}/abstract-v1.pdf",
+      'mime_type' => 'application/pdf',
+      'size_bytes' => 900,
+      'review_status' => 'revision_requested',
+      'revision_notes' => 'Please include the missing performance results.',
+    ]);
+
+    $this->actingAs($ipHead)
+      ->get(route('ip-head-dashboard.disclosures.show', $disclosure))
+      ->assertOk()
+      ->assertSee('1 updated file')
+      ->assertSee('data-file-version="2"', false)
+      ->assertSee('data-file-initial-revision-note="Please include the missing performance results."', false)
+      ->assertSee('Revised')
+      ->assertSee('ip-head-file-version-flag--revised')
+      ->assertDontSee('ip-head-file-version-flag--latest')
+      ->assertSee('data-file-preview-url="' . route('ip-head-dashboard.technology-files.preview', [
+        $disclosure,
+        $file,
+        'v' => $file->version,
+      ]) . '"', false)
+      ->assertSee('Review Needed')
+      ->assertSee('Requested Revision')
+      ->assertSee('Approved')
+      ->assertSee('name="technology_files[' . $file->id . '][status]"', false);
+
+    $this->actingAs($ipHead)
+      ->postJson(route('ip-head-dashboard.disclosures.attachments.review', $disclosure), [
+        'technology_files' => [
+          $file->id => ['status' => 'revision_requested'],
+        ],
+      ])
+      ->assertUnprocessable();
+
+    $this->actingAs($ipHead)
+      ->postJson(route('ip-head-dashboard.disclosures.attachments.review', $disclosure), [
+        'technology_files' => [
+          $file->id => [
+            'status' => 'revision_requested',
+            'revision_notes' => 'Please replace this PDF with a legible copy.',
+          ],
+        ],
+      ])
+      ->assertOk()
+      ->assertJsonPath('reviewed_count', 1);
+
+    $this->assertDatabaseHas('disclosure_technology_files', [
+      'id' => $file->id,
+      'review_status' => 'revision_requested',
+      'revision_notes' => 'Please replace this PDF with a legible copy.',
+    ]);
+
+    $this->actingAs($submitter)
+      ->get(route('dashboard.submissions.status-updates'))
+      ->assertOk()
+      ->assertJsonPath('0.technology_title', $disclosure->technology_title)
+      ->assertJsonPath('0.technologies.0.technology_title', 'Community water filter')
+      ->assertJsonPath('0.technologies.0.files.0.original_name', 'abstract.pdf')
+      ->assertJsonPath('0.technologies.0.files.0.review_status', 'revision_requested')
+      ->assertJsonPath('0.technologies.0.files.0.updated_at', $file->fresh()->updated_at->toJSON());
+
+    $this->actingAs($ipHead)
+      ->get(route('ip-head-dashboard.disclosures.show', $disclosure))
+      ->assertOk()
+      ->assertSee('ip-head-file-revision-note--inline')
+      ->assertSee('Please replace this PDF with a legible copy.')
+      ->assertSee('name="technology_files[' . $file->id . '][revision_notes]"', false)
+      ->assertSee('id="technology-file-notes-' . $file->id . '"', false)
+      ->assertSee('class="ip-head-technology-file-notes d-none"', false)
+      ->assertSee('data-file-revision-note="Please replace this PDF with a legible copy."', false)
+      ->assertDontSee('updated file')
+      ->assertSee('data-file-category="Abstract / Summary"', false);
+
+    $this->actingAs($ipHead)
+      ->postJson(route('ip-head-dashboard.review', $disclosure), [
+        'status' => 'endorsed',
+      ])
+      ->assertUnprocessable()
+      ->assertJsonValidationErrors('status');
+
+    $this->actingAs($ipHead)
+      ->postJson(route('ip-head-dashboard.disclosures.attachments.review', $disclosure), [
+        'technology_files' => [
+          $file->id => ['status' => 'accepted'],
+        ],
+      ])
+      ->assertOk();
+
+    $this->assertDatabaseHas('disclosure_technology_files', [
+      'id' => $file->id,
+      'review_status' => 'accepted',
+      'revision_notes' => null,
+    ]);
+
+    $this->actingAs($ipHead)
+      ->postJson(route('ip-head-dashboard.review', $disclosure), [
+        'status' => 'endorsed',
+      ])
+      ->assertOk()
+      ->assertJsonPath('disclosure.status', 'endorsed');
+
+    $this->actingAs($ipHead)
+      ->postJson(route('ip-head-dashboard.disclosures.attachments.review', $disclosure), [
+        'technology_files' => [
+          $file->id => ['status' => 'review_needed'],
+        ],
+      ])
+      ->assertStatus(409);
   }
 
   public function test_ip_head_can_preview_pdf_inline_and_non_ip_heads_are_forbidden(): void
@@ -530,6 +796,141 @@ class IpHeadDashboardTest extends TestCase
     $response = $this->actingAs($ipHead)->get($route);
     $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
     $this->assertStringStartsWith('inline;', $response->headers->get('Content-Disposition'));
+  }
+
+  public function test_approved_file_statuses_are_locked_for_ip_head(): void
+  {
+    $submitter = $this->makeUser('approved-file-owner');
+    $ipHead = $this->makeUser('approved-file-reviewer', true);
+    $disclosure = $this->makeDisclosure($submitter);
+    $attachment = $disclosure->attachments()->create([
+      'type' => 'drawings',
+      'original_name' => 'approved-drawing.pdf',
+      'stored_path' => "innovation-disclosures/{$disclosure->id}/drawings/approved-drawing.pdf",
+      'mime_type' => 'application/pdf',
+      'size_bytes' => 1024,
+      'review_status' => 'accepted',
+      'is_latest_submission' => true,
+    ]);
+    $technology = $disclosure->technologies()->create([
+      'technology_title' => 'Approved water filter',
+    ]);
+    $technologyFile = $technology->files()->create([
+      'narrative_key' => 'abstract_summary',
+      'original_name' => 'approved-abstract.pdf',
+      'stored_path' => "innovation-disclosures/{$disclosure->id}/technologies/{$technology->id}/approved-abstract.pdf",
+      'mime_type' => 'application/pdf',
+      'size_bytes' => 1024,
+      'review_status' => 'accepted',
+    ]);
+
+    $this->actingAs($ipHead)
+      ->get(route('ip-head-dashboard.disclosures.show', $disclosure))
+      ->assertOk()
+      ->assertSee('Approved')
+      ->assertSee('name="technology_files[' . $technologyFile->id . '][status]"', false)
+      ->assertSee('disabled', false)
+      ->assertDontSee('name="attachments[' . $attachment->id . '][status]"', false);
+
+    $this->actingAs($ipHead)
+      ->postJson(route('ip-head-dashboard.disclosures.attachments.review', $disclosure), [
+        'attachments' => [
+          $attachment->id => ['status' => 'review_needed'],
+        ],
+      ])
+      ->assertStatus(409);
+
+    $this->actingAs($ipHead)
+      ->postJson(route('ip-head-dashboard.disclosures.attachments.review', $disclosure), [
+        'technology_files' => [
+          $technologyFile->id => ['status' => 'review_needed'],
+        ],
+      ])
+      ->assertStatus(409);
+
+    $this->actingAs($ipHead)
+      ->postJson(route('ip-head-dashboard.attachments.review', $attachment), [
+        'needs_revision' => '1',
+        'revision_notes' => 'Please update the drawing.',
+      ])
+      ->assertStatus(409);
+
+    $this->assertDatabaseHas('disclosure_attachments', [
+      'id' => $attachment->id,
+      'review_status' => 'accepted',
+      'needs_revision' => false,
+    ]);
+    $this->assertDatabaseHas('disclosure_technology_files', [
+      'id' => $technologyFile->id,
+      'review_status' => 'accepted',
+    ]);
+  }
+
+  public function test_ip_head_can_attach_a_noted_pdf_that_is_visible_to_the_inventor(): void
+  {
+    Storage::fake('local');
+    $submitter = $this->makeUser('noted-pdf-owner');
+    $ipHead = $this->makeUser('noted-pdf-ip-head', true);
+    $disclosure = $this->makeDisclosure($submitter);
+    $technology = $disclosure->technologies()->create([
+      'technology_title' => 'Water filtration patent',
+    ]);
+    $file = $technology->files()->create([
+      'narrative_key' => 'abstract_summary',
+      'original_name' => 'abstract.pdf',
+      'stored_path' => "innovation-disclosures/{$disclosure->id}/technologies/{$technology->id}/abstract.pdf",
+      'mime_type' => 'application/pdf',
+      'size_bytes' => 1024,
+      'review_status' => 'review_needed',
+    ]);
+    Storage::disk('local')->put($file->stored_path, '%PDF-1.4 submitted document');
+    $notedPdf = UploadedFile::fake()->create('annotated-abstract.pdf', 5, 'application/pdf');
+
+    $this->actingAs($ipHead)
+      ->post(route('ip-head-dashboard.disclosures.attachments.review', $disclosure), [
+        'technology_files' => [
+          $file->id => [
+            'status' => 'revision_requested',
+            'revision_notes' => 'Please clarify the testing results.',
+            'revision_guidance_pdf' => $notedPdf,
+          ],
+        ],
+      ], ['Accept' => 'application/json'])
+      ->assertOk()
+      ->assertJsonPath('reviewed_count', 1);
+
+    $savedFile = $file->fresh();
+    $this->assertSame('Please clarify the testing results.', $savedFile->revision_notes);
+    $this->assertSame('annotated-abstract.pdf', $savedFile->revision_guidance_name);
+    Storage::disk('local')->assertExists($savedFile->revision_guidance_path);
+
+    $ipHeadGuidancePreviewUrl = route('ip-head-dashboard.technology-files.preview', [
+      $disclosure,
+      $file,
+      'guidance' => 1,
+    ]);
+    $inventorGuidancePreviewUrl = route('dashboard.submissions.technology-files.preview', [
+      $disclosure,
+      $file,
+      'guidance' => 1,
+    ]);
+    $this->actingAs($ipHead)
+      ->get(route('ip-head-dashboard.disclosures.show', $disclosure))
+      ->assertOk()
+      ->assertSee('data-file-guidance-url="' . $ipHeadGuidancePreviewUrl . '"', false)
+      ->assertSee('data-file-guidance-name="annotated-abstract.pdf"', false);
+
+    $this->actingAs($submitter)
+      ->get(route('dashboard.submissions.show', $disclosure))
+      ->assertOk()
+      ->assertSee('data-file-guidance-url="' . $inventorGuidancePreviewUrl . '"', false)
+      ->assertSee('data-file-guidance-name="annotated-abstract.pdf"', false)
+      ->assertSee('Please clarify the testing results.');
+
+    $this->actingAs($submitter)
+      ->get($inventorGuidancePreviewUrl)
+      ->assertOk()
+      ->assertHeader('Content-Type', 'application/pdf');
   }
 
   public function test_ip_head_login_redirects_to_ip_head(): void

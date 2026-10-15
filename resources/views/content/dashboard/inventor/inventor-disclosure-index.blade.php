@@ -10,7 +10,7 @@ $page = $page ?? 'analytics';
 @endif
 @endsection
 @section('page-style')
-<link rel="stylesheet" href="{{ asset('user/css/innovation-disclosure.css') }}">
+<link rel="stylesheet" href="{{ asset('user/css/innovation-disclosure.css') }}?v={{ filemtime(public_path('user/css/innovation-disclosure.css')) }}">
 @endsection
 @section('vendor-script')
 @if ($page === 'analytics')
@@ -129,22 +129,22 @@ $page = $page ?? 'analytics';
   'detailed_description' => 'Detailed Description',
   'examples_results' => 'Examples / Experimental Results / Validation',
   ];
-  $technologyTableColumns = [
-  'abstract_summary' => 'Abstract',
-  'invention_summary' => 'Invention Summary',
-  'detailed_description' => 'Description',
-  'technical_field' => 'Field',
-  'background_summary' => 'Background',
-  'examples_results' => 'Results',
+  $technologyFileHeaders = [
+  'abstract_summary' => ['label' => 'Summary', 'description' => 'Abstract / Summary'],
+  'technical_field' => ['label' => 'Field', 'description' => 'Technical / Creative Field'],
+  'background_summary' => ['label' => 'Background', 'description' => 'Background / Problem'],
+  'invention_summary' => ['label' => 'Invention', 'description' => 'Summary of the Invention / Innovation'],
+  'detailed_description' => ['label' => 'Description', 'description' => 'Detailed Description'],
+  'examples_results' => ['label' => 'Results', 'description' => 'Examples / Experimental Results / Validation'],
+  'sample_photo' => ['label' => 'Sample', 'description' => 'Sample picture'],
+  'technical_drawing' => ['label' => 'Drawing', 'description' => 'Technical drawing'],
   ];
   $technologyRows = old('technologies');
   if (! is_array($technologyRows)) $technologyRows = [];
-  $technologyRows = array_map(static function ($technology) use ($narrativeFields) {
+  $technologyRows = array_map(static function ($technology) {
   $technology = is_array($technology) ? $technology : [];
   return [
   'technology_title' => $technology['technology_title'] ?? '',
-  ...array_fill_keys($narrativeFields, ''),
-  ...array_intersect_key($technology, array_flip($narrativeFields)),
   ];
   }, $technologyRows);
   @endphp
@@ -160,14 +160,40 @@ $page = $page ?? 'analytics';
     </div>
     @endif
 
-    <form method="POST" enctype="multipart/form-data" action="{{ route('dashboard.innovation-disclosures.store') }}">
+    <form id="new-disclosure-form" method="POST" enctype="multipart/form-data" novalidate action="{{ route('dashboard.innovation-disclosures.store') }}" data-upload-url="{{ route('dashboard.innovation-disclosure.uploads.store') }}" data-post-max-size="{{ ini_get('post_max_size') }}" data-upload-max-size="{{ ini_get('upload_max_filesize') }}">
       @csrf
+      <div class="d-none" data-idf-staged-upload-tokens>
+        @if (is_array(old('idf_upload_tokens.attachments', [])))
+          @foreach (old('idf_upload_tokens.attachments', []) as $key => $token)
+        <input type="hidden" data-idf-upload-token data-original-name="{{ $stagedUploadNames[$token] ?? 'Previously staged PDF' }}" name="idf_upload_tokens[attachments][{{ $key }}]" value="{{ $token }}">
+          @endforeach
+        @endif
+        @if (is_array(old('idf_upload_tokens.technologies', [])))
+          @foreach (old('idf_upload_tokens.technologies', []) as $technologyIndex => $technologyTokens)
+            @if (is_array($technologyTokens))
+              @foreach ($technologyTokens as $key => $token)
+        <input type="hidden" data-idf-upload-token data-original-name="{{ $stagedUploadNames[$token] ?? 'Previously staged PDF' }}" name="idf_upload_tokens[technologies][{{ $technologyIndex }}][{{ $key }}]" value="{{ $token }}">
+              @endforeach
+            @endif
+          @endforeach
+        @endif
+      </div>
       <div class="row g-5">
-        <div class="col-12">
+        <div class="col-12" data-idf-page="1">
+          <div class="alert alert-info d-flex align-items-start gap-2 mb-3" role="note">
+            <i class="icon-base ri ri-information-line mt-1" aria-hidden="true"></i>
+            <span>Ideally, the person filling out this Innovation Disclosure Form should be the Lead Creator.</span>
+          </div>
           <section class="disclosure-form-section bg-white shadow-sm" aria-labelledby="creator-information-heading">
-            <div class="disclosure-form-section__header">
+            <div class="disclosure-form-section__header d-flex flex-wrap justify-content-between align-items-center gap-3">
               <h4 class="mb-0 fw-bold" id="creator-information-heading">Creator Information</h4>
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                <button class="btn btn-label-info" type="button" id="import-idf-button"><i class="icon-base ri ri-upload-2-line me-1" aria-hidden="true"></i>Import submission</button>
+                <input class="visually-hidden" type="file" id="import-idf-file" accept=".json,application/json" aria-label="Import saved IDF JSON file">
+                <button class="btn btn-success" type="button" id="save-idf-submission"><i class="icon-base ri ri-download-2-line me-1" aria-hidden="true"></i>Save submission</button>
+              </div>
             </div>
+            <span class="visually-hidden" id="idf-draft-save-status" role="status" aria-live="polite"></span>
             <div class="idf-creator-information-grid">
               <div><label class="form-label" for="lead_creator_name">Name of lead creator</label><input class="form-control" id="lead_creator_name" name="lead_creator_name" value="{{ old('lead_creator_name') }}" required maxlength="255"></div>
               <div><label class="form-label" for="email">Email address</label><input class="form-control" id="email" name="email" type="email" value="{{ old('email', auth()->user()->email) }}" required maxlength="255"></div>
@@ -197,8 +223,8 @@ $page = $page ?? 'analytics';
                 <label class="form-label" for="technology_type">Technology / Invention Category</label>
                 <select class="form-select" id="technology_type" name="technology_type" required>
                   <option value="">Choose a category</option>
-                  <option value="mechanical_engineering" @selected(old('technology_type')==='mechanical_engineering')>IT, IoT &amp; Engineering</option>
-                  <option value="chemical" @selected(old('technology_type')==='chemical')>Food, Pharmaceutical, Structural Chemistry</option>
+                  <option value="mechanical" @selected(old('technology_type')==='mechanical')>Mechanical (IT, IoT &amp; Engineering)</option>
+                  <option value="chemical" @selected(old('technology_type')==='chemical')>Chemical (Food, Pharmaceutical, Structural Chemistry)</option>
                 </select>
               </div>
               <div><label class="form-label" for="date_of_creation">Date of creation</label><input class="form-control" id="date_of_creation" name="date_of_creation" type="date" value="{{ old('date_of_creation') }}" required></div>
@@ -208,11 +234,11 @@ $page = $page ?? 'analytics';
           </section>
         </div>
 
-        <div class="col-12">
+        <div class="col-12" data-idf-page="1">
           <section class="disclosure-form-section bg-white shadow-sm" aria-labelledby="inventors-heading">
             <div class="disclosure-form-section__header d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
               <h4 class="mb-0 fw-bold" id="inventors-heading">Creators and Contributions</h4>
-              <button class="btn btn-outline-primary" type="button" id="add-inventor" data-bs-toggle="modal" data-bs-target="#creator-modal"><i class="icon-base ri ri-user-add-line me-1"></i>Add creator</button>
+              <button class="btn btn-outline-primary" type="button" id="add-inventor"><i class="icon-base ri ri-user-add-line me-1"></i>Add creator</button>
             </div>
             <div id="inventors-list" aria-live="polite">
               <div class="table-responsive">
@@ -223,11 +249,14 @@ $page = $page ?? 'analytics';
               </div>
               <div id="inventor-hidden-fields" class="d-none"></div>
             </div>
-            <div class="alert alert-info mb-0 mt-3" role="status">Declared contributions currently total <strong id="contribution-total">0.00%</strong>; the final total must be exactly 100%. For more than six creators, attach an additional signed creator sheet under Supporting Materials.</div>
+            <div class="alert alert-info alert-dismissible fade show mb-0 mt-3" role="status">
+              Creator contributions total <strong id="contribution-total">0.00%</strong> and must equal 100%.
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Dismiss creator contribution notice"></button>
+            </div>
           </section>
         </div>
 
-        <div class="col-12">
+        <div class="col-12" data-idf-page="2">
           <section class="disclosure-form-section bg-white shadow-sm" aria-labelledby="ownership-heading">
             <div class="disclosure-form-section__header">
               <h4 class="mb-0 fw-bold" id="ownership-heading">Ownership and University Support Facts</h4>
@@ -278,31 +307,37 @@ $page = $page ?? 'analytics';
                 </select>
               </div>
               <div class="col-12 {{ old('ownership_declaration') === 'assigned_to_slsu' && old('university_relationship') === 'student' ? '' : 'd-none' }}" id="student-assignment-notice">
-                <div class="alert alert-warning mb-0"><strong>Student inventor:</strong> Please visit the IP Office to complete your Deed of Assignment. A signed copy must be uploaded below before submitting.</div>
+                <div class="alert alert-warning alert-dismissible fade show mb-0">
+                  Student inventors assigning ownership to SLSU must obtain and upload a signed Deed of Assignment from the IP Office.
+                  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Dismiss student assignment notice"></button>
+                </div>
               </div>
               <div class="col-12 {{ old('ownership_declaration') === 'assigned_to_slsu' ? '' : 'd-none' }}" id="deed-assignment-field">
                 <label class="form-label" for="attachment-deed-assignment">Signed Deed of Assignment (PDF) <span class="text-danger">*</span></label>
-                <input class="form-control pdf-upload" id="attachment-deed-assignment" name="attachments[deed_assignment]" type="file" accept="application/pdf,.pdf" data-file-label="Deed of Assignment" @required(old('ownership_declaration') === 'assigned_to_slsu')>
+                <input class="form-control pdf-upload" id="attachment-deed-assignment" name="attachments[deed_assignment]" type="file" accept="application/pdf,.pdf" data-file-label="Deed of Assignment" @required(old('ownership_declaration') === 'assigned_to_slsu' && blank(old('idf_upload_tokens.attachments.deed_assignment')))>
                 <div class="form-text">Maximum 15 MB. If you are a student, obtain this document from the IP Office first.</div>
               </div>
             </div>
           </section>
         </div>
 
-        <div class="col-12">
+        <div class="col-12" data-idf-page="2">
           <section class="disclosure-form-section bg-white shadow-sm" aria-labelledby="technical-description-heading">
             <div class="disclosure-form-section__header d-flex flex-wrap justify-content-between align-items-center gap-3">
               <h4 class="mb-0 fw-bold" id="technical-description-heading">Technical / Creative Description</h4>
               <button class="btn btn-outline-primary" type="button" id="add-technology" data-bs-toggle="modal" data-bs-target="#technology-modal"><i class="icon-base ri ri-add-line me-1"></i>Add Technology</button>
             </div>
-            <div class="alert alert-info mb-4">This technical disclosure is collected for evaluation and record-keeping. Complete each narrative field with specific, factual details.</div>
+            <div class="alert alert-info alert-dismissible fade show mb-4">
+              Upload a PDF for every technology narrative, one sample picture PDF, and one technical drawing PDF for each technology.
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Dismiss technical description notice"></button>
+            </div>
             <div class="table-responsive">
               <table class="table table-hover align-middle technology-table mb-0">
                 <thead>
                   <tr>
                     <th scope="col">Technology Title</th>
-                    @foreach ($technologyTableColumns as $label)
-                    <th scope="col" class="text-center">{{ $label }}</th>
+                    @foreach ($technologyFileHeaders as $header)
+                    <th scope="col" aria-label="{{ $header['description'] }}" title="{{ $header['description'] }}">{{ $header['label'] }}</th>
                     @endforeach
                     <th scope="col" class="text-end">Action</th>
                   </tr>
@@ -311,24 +346,24 @@ $page = $page ?? 'analytics';
               </table>
             </div>
             <div id="technology-hidden-fields" class="d-none"></div>
-            <p class="form-text mb-0 mt-3">Add up to two technologies under this research proposal.</p>
           </section>
         </div>
 
-        <div class="col-12">
+        <div class="col-12" data-idf-page="3">
           <section class="disclosure-form-section bg-white shadow-sm" aria-labelledby="supporting-materials-heading">
             <div class="disclosure-form-section__header"><h4 class="mb-0 fw-bold" id="supporting-materials-heading">Drawings, Photographs, Code, Models, or Other Supporting Materials</h4></div>
-            <p class="text-body-secondary">All uploads must be PDF files (maximum 15 MB each). Put photos, drawings, code, or model images into a PDF before uploading. Typed signatures are used instead of image-signature uploads.</p>
+            <div class="alert alert-info alert-dismissible fade show mb-4">
+              Upload supporting documents as PDFs (maximum 15 MB each), with images compiled into PDFs and typed signatures.
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Dismiss supporting materials notice"></button>
+            </div>
             <div class="row g-4">
-              <div class="col-md-6"><label class="form-label" for="attachment-sample-photo">Sample photo of the product (PDF) <span class="text-danger">*</span></label><input class="form-control pdf-upload" id="attachment-sample-photo" name="attachments[sample_photo]" type="file" accept="application/pdf,.pdf" data-file-label="Sample photo" required></div>
+              <div class="col-md-6"><label class="form-label" for="attachment-sample-photo">Additional sample photo (PDF)</label><input class="form-control pdf-upload" id="attachment-sample-photo" name="attachments[sample_photo]" type="file" accept="application/pdf,.pdf" data-file-label="Additional sample photo"></div>
               <div class="col-md-6 d-none" id="additional-sheet-field"><label class="form-label" for="attachment-additional-sheet">Additional signed creator sheet (PDF) <span class="text-danger">*</span></label><input class="form-control pdf-upload" id="attachment-additional-sheet" name="attachments[additional_signed_sheet]" type="file" accept="application/pdf,.pdf" data-file-label="Additional signed creator sheet"></div>
-              <div class="col-md-6"><label class="form-label" for="file_drive_link">File / Drive link <span class="text-body-secondary">(optional)</span></label><input class="form-control" id="file_drive_link" name="file_drive_link" type="url" value="{{ old('file_drive_link') }}" maxlength="2048" placeholder="https://"></div>
-              <div class="col-md-6"><label class="form-label" for="attachment-count">Number of attachments</label><input class="form-control" id="attachment-count" value="0" readonly aria-live="polite"><div class="form-text">Automatically counted from the selected PDF files.</div></div>
             </div>
           </section>
         </div>
 
-        <div class="col-12">
+        <div class="col-12" data-idf-page="3">
           <section class="disclosure-form-section bg-white shadow-sm" aria-labelledby="costing-heading">
             <div class="disclosure-form-section__header d-flex flex-wrap justify-content-between align-items-center gap-3">
               <h4 class="mb-0 fw-bold" id="costing-heading">Costing of Materials and Resources</h4>
@@ -354,25 +389,39 @@ $page = $page ?? 'analytics';
           </section>
         </div>
 
-        <div class="col-12">
+        <div class="col-12" data-idf-page="4">
           <section class="disclosure-form-section bg-white shadow-sm" aria-labelledby="declaration-heading">
             <div class="disclosure-form-section__header"><h4 class="mb-0 fw-bold" id="declaration-heading">Declaration &amp; Receipt</h4></div>
-            <p class="mb-4">Each creator's typed signature, confirmation, and signing date are collected with their contribution above. The receipt details below are completed by ITSO personnel when the form is received.</p>
+            <p class="mb-4">Creator confirmations are collected with their contribution details above. The receipt details below are completed by ITSO personnel when the form is received.</p>
             <div class="row g-4">
               <div class="col-md-6"><label class="form-label" for="received-by-display">Received by (ITSO Personnel)</label><input class="form-control" id="received-by-display" value="To be completed by ITSO personnel" disabled></div>
               <div class="col-md-6"><label class="form-label" for="date-received-display">Date received</label><input class="form-control" id="date-received-display" value="To be completed upon receipt" disabled></div>
             </div>
           </section>
         </div>
-        <div class="col-12 d-flex flex-wrap align-items-center justify-content-between gap-3">
-          <div class="d-flex flex-wrap align-items-center gap-2">
-            <button class="btn btn-outline-secondary" type="button" id="import-idf-button"><i class="icon-base ri ri-upload-2-line me-1"></i>Import IDF</button>
-            <input class="visually-hidden" type="file" id="import-idf-file" accept=".json,application/json" aria-label="Import saved IDF JSON file">
-            <span class="small text-body-secondary" id="idf-draft-save-status" role="status" aria-live="polite"></span>
-          </div>
-          <div class="d-flex flex-wrap justify-content-end gap-2">
-            <button class="btn btn-outline-primary" type="button" id="save-idf-submission"><i class="icon-base ri ri-download-2-line me-1"></i>Save submission</button>
-            <button class="btn btn-primary" type="submit"><i class="icon-base ri ri-send-plane-line me-1"></i>Submit disclosure</button>
+        <div class="col-12 idf-wizard-controls">
+          <div class="idf-wizard-navigation">
+            <button class="btn btn-outline-secondary" type="button" id="idf-previous-page"><i class="icon-base ri ri-arrow-left-line me-1" aria-hidden="true"></i>Previous</button>
+            <ol class="idf-wizard-steps" id="idf-wizard-steps" aria-label="IDF form sections">
+              <li class="idf-wizard-step" data-wizard-step="1">
+                <span class="idf-wizard-step__indicator">1</span>
+                <span class="idf-wizard-step__label">Creator Information</span>
+              </li>
+              <li class="idf-wizard-step" data-wizard-step="2">
+                <span class="idf-wizard-step__indicator">2</span>
+                <span class="idf-wizard-step__label">Ownership &amp; Technology</span>
+              </li>
+              <li class="idf-wizard-step" data-wizard-step="3">
+                <span class="idf-wizard-step__indicator">3</span>
+                <span class="idf-wizard-step__label">Supporting Materials &amp; Costing</span>
+              </li>
+              <li class="idf-wizard-step" data-wizard-step="4">
+                <span class="idf-wizard-step__indicator">4</span>
+                <span class="idf-wizard-step__label">Declaration</span>
+              </li>
+            </ol>
+            <button class="btn btn-primary" type="button" id="idf-next-page">Next<i class="icon-base ri ri-arrow-right-line ms-1" aria-hidden="true"></i></button>
+            <button class="btn btn-primary" type="submit" id="submit-idf-disclosure"><i class="icon-base ri ri-send-plane-line me-1"></i>Submit disclosure</button>
           </div>
         </div>
       </div>
@@ -404,41 +453,70 @@ $page = $page ?? 'analytics';
   </div>
 
   <div class="modal fade" id="technology-modal" tabindex="-1" aria-labelledby="technology-modal-title" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable idf-modal-dialog">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable idf-modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title fw-bold" id="technology-modal-title">Add Technology</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <div class="alert alert-info mb-3" role="note">
-            <i class="icon-base ri ri-information-line me-1" aria-hidden="true"></i>
-            For each narrative, enter the text or upload a PDF (maximum 15 MB).
+          <div class="alert alert-info alert-dismissible fade show mb-3" role="note">
+            Upload one PDF for every technology narrative, plus a sample picture and technical drawing PDF (maximum 15 MB each).
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Dismiss technology instructions"></button>
           </div>
           <div class="row g-3" id="technology-modal-fields">
-            <div class="col-12"><label class="form-label" for="technology-modal-title-input">Title of Invention / Technology <span class="text-danger">*</span></label><input class="form-control" id="technology-modal-title-input" data-technology-field="technology_title" maxlength="500" required placeholder="Use a specific technical or creative title."></div>
+            <div class="col-12 technology-title-field"><label class="form-label" for="technology-modal-title-input">Title of Invention / Technology <span class="text-danger">*</span></label><input class="form-control" id="technology-modal-title-input" data-technology-field="technology_title" maxlength="500" required placeholder="Use a specific technical or creative title."></div>
             @foreach ([
-              'abstract_summary' => ['Abstract / Summary', 'Describe the problem, core solution, and principal features.'],
-              'technical_field' => ['Technical / Creative Field', 'State the general field and specific field.'],
-              'background_summary' => ['Background / Problem', 'Describe the current situation, limitations or gaps, and differences from existing knowledge.'],
-              'invention_summary' => ['Summary of the Invention / Innovation', 'Explain the technical solution, objectives, essential features, and advantages.'],
-              'detailed_description' => ['Detailed Description', 'Include components, steps, procedures, parameters, conditions, instruments, tests, results, and processes.'],
-              'examples_results' => ['Examples / Experimental Results / Validation', 'Describe test procedures, results, optimization, validation, and reduction-to-practice evidence.'],
-            ] as $field => [$label, $placeholder])
-            <div class="col-12 technology-narrative-field" data-narrative-field="{{ $field }}">
-              <label class="form-label" for="technology-modal-{{ $field }}">{{ $label }} <span class="text-danger">*</span></label>
-              <textarea class="form-control mb-2" id="technology-modal-{{ $field }}" data-technology-field="{{ $field }}" rows="3" placeholder="{{ $placeholder }}"></textarea>
+              'abstract_summary' => 'Abstract / Summary',
+              'technical_field' => 'Technical / Creative Field',
+              'background_summary' => 'Background / Problem',
+              'invention_summary' => 'Summary of the Invention / Innovation',
+              'detailed_description' => 'Detailed Description',
+              'examples_results' => 'Examples / Experimental Results / Validation',
+            ] as $field => $label)
+            <div class="col-12 col-md-6 technology-narrative-field" data-narrative-field="{{ $field }}">
+              <label class="form-label" for="technology-modal-file-{{ $field }}">{{ $label }} (PDF) <span class="text-danger">*</span></label>
               <div class="technology-upload-control" data-technology-upload-slot="{{ $field }}">
-                <input class="form-control pdf-upload" id="technology-modal-file-{{ $field }}" data-technology-file="{{ $field }}" type="file" accept="application/pdf,.pdf" data-file-label="{{ $label }}" aria-describedby="technology-file-status-{{ $field }}">
+                <input class="form-control pdf-upload technology-file-input" id="technology-modal-file-{{ $field }}" data-technology-file="{{ $field }}" type="file" accept="application/pdf,.pdf" data-file-label="{{ $label }}" aria-describedby="technology-file-status-{{ $field }}">
                 <button class="btn btn-icon btn-text-danger d-none technology-remove-file" type="button" data-remove-technology-file="{{ $field }}" aria-label="Remove {{ $label }} PDF" title="Remove PDF">
                   <i class="icon-base ri ri-delete-bin-line" aria-hidden="true"></i>
                 </button>
               </div>
               <div class="technology-upload-status">
-                <span class="form-text" id="technology-file-status-{{ $field }}" data-existing-technology-file="{{ $field }}"></span>
+                <span class="form-text" id="technology-file-status-{{ $field }}" data-existing-technology-file="{{ $field }}" aria-live="polite"></span>
               </div>
             </div>
             @endforeach
+            <div class="col-12 technology-upload-divider" aria-hidden="true"><hr></div>
+            <div class="col-md-6 technology-file-field">
+              <label class="form-label" for="technology-modal-file-sample-photo">Sample picture (PDF) <span class="text-danger">*</span></label>
+              <div class="technology-upload-control" data-technology-upload-slot="sample_photo">
+                <input class="form-control pdf-upload technology-file-input" id="technology-modal-file-sample-photo" data-technology-file="sample_photo" type="file" accept="application/pdf,.pdf" data-file-label="Sample picture" aria-describedby="technology-file-status-sample-photo">
+                <button class="btn btn-icon btn-text-danger d-none technology-remove-file" type="button" data-remove-technology-file="sample_photo" aria-label="Remove sample picture PDF" title="Remove PDF">
+                  <i class="icon-base ri ri-delete-bin-line" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="technology-upload-status"><span class="form-text" id="technology-file-status-sample-photo" data-existing-technology-file="sample_photo"></span></div>
+            </div>
+            <div class="col-md-6 technology-file-field">
+              <label class="form-label" for="technology-modal-file-technical-drawing">Technical drawing (PDF) <span class="text-danger">*</span></label>
+              <div class="technology-upload-control" data-technology-upload-slot="technical_drawing">
+                <input class="form-control pdf-upload technology-file-input" id="technology-modal-file-technical-drawing" data-technology-file="technical_drawing" type="file" accept="application/pdf,.pdf" data-file-label="Technical drawing" aria-describedby="technology-file-status-technical-drawing">
+                <button class="btn btn-icon btn-text-danger d-none technology-remove-file" type="button" data-remove-technology-file="technical_drawing" aria-label="Remove technical drawing PDF" title="Remove PDF">
+                  <i class="icon-base ri ri-delete-bin-line" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="technology-upload-status"><span class="form-text" id="technology-file-status-technical-drawing" data-existing-technology-file="technical_drawing"></span></div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="file_drive_link">Google Drive link for additional pictures</label>
+              <input class="form-control" id="file_drive_link" name="file_drive_link" type="url" form="new-disclosure-form" value="{{ old('file_drive_link') }}" maxlength="2048" placeholder="https://">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="attachment-count">Number of attachments</label>
+              <input class="form-control" id="attachment-count" value="0" readonly aria-live="polite">
+              <div class="form-text">Automatically counted from the selected PDF files.</div>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -480,40 +558,69 @@ $page = $page ?? 'analytics';
     </div>
   </div>
 
-  <div class="modal fade" id="creator-modal" tabindex="-1" aria-labelledby="creator-modal-title" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable idf-modal-dialog">
+  <div class="modal fade creator-entry-modal" id="creator-modal" tabindex="-1" aria-labelledby="creator-modal-title" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg idf-modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title fw-bold" id="creator-modal-title">Add Creator</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <h5 class="modal-title fw-bold" id="creator-modal-title">Creator details</h5>
+          <button type="button" class="btn-close" data-creator-modal-close aria-label="Close"></button>
         </div>
-        <div class="modal-body">
-          <div class="row g-3" id="creator-modal-fields">
-            <div class="col-md-4"><label class="form-label" for="creator-modal-last-name">Last Name</label><input class="form-control" id="creator-modal-last-name" data-creator-field="last_name" maxlength="100" required></div>
-            <div class="col-md-4"><label class="form-label" for="creator-modal-first-name">First Name</label><input class="form-control" id="creator-modal-first-name" data-creator-field="first_name" maxlength="100" required></div>
-            <div class="col-md-4"><label class="form-label" for="creator-modal-middle-initial">Middle Initial <span class="text-body-secondary">(optional)</span></label><input class="form-control" id="creator-modal-middle-initial" data-creator-field="middle_initial" maxlength="1" placeholder="A"></div>
-            <div class="col-md-4"><label class="form-label" for="creator-modal-suffix">Suffix <span class="text-body-secondary">(optional)</span></label><input class="form-control" id="creator-modal-suffix" data-creator-field="suffix" maxlength="20" placeholder="Jr., III"></div>
-            <div class="col-md-6"><label class="form-label" for="creator-modal-email">Email Address</label><input class="form-control" id="creator-modal-email" data-creator-field="email" type="email" maxlength="255" required></div>
-            <div class="col-md-6"><label class="form-label" for="creator-modal-position">Position / Affiliation</label><input class="form-control" id="creator-modal-position" data-creator-field="position_affiliation" maxlength="500" required></div>
-            <div class="col-12"><label class="form-label" for="creator-modal-contribution">Specific Intellectual / Technical Contribution</label><textarea class="form-control" id="creator-modal-contribution" data-creator-field="technical_contribution" rows="2" required></textarea></div>
-            <div class="col-md-4"><label class="form-label" for="creator-modal-percent">Declared Contribution (%)</label><input class="form-control" id="creator-modal-percent" data-creator-field="contribution_percent" type="number" min="0.01" max="100" step="0.01" required></div>
-            <fieldset class="col-12 creator-nature-fieldset">
-              <legend class="form-label">Nature of contribution <span class="text-danger">*</span></legend>
-              <div class="row g-2">
-                @foreach (['conception' => 'Conception', 'identification_essential_element' => 'Identification of an essential element', 'technical_feature' => 'Technical feature', 'experimental_refinement' => 'Experimental refinement', 'reduction_to_practice' => 'Reduction to practice', 'testing_validation' => 'Testing / validation', 'optimization' => 'Optimization', 'other_substantive' => 'Other substantive contribution'] as $nature => $label)
-                <div class="col-sm-6 col-lg-6"><div class="form-check"><input class="form-check-input nature-checkbox" data-nature="{{ $nature }}" id="creator-modal-nature-{{ $nature }}" type="checkbox" value="{{ $nature }}"><label class="form-check-label" for="creator-modal-nature-{{ $nature }}">{{ $label }}</label></div></div>
-                @endforeach
-              </div>
-            </fieldset>
-            <div class="col-12 d-none" data-other-contribution-field><label class="form-label" for="creator-modal-other">Specify Other Substantive Contribution</label><input class="form-control" id="creator-modal-other" data-creator-field="contribution_other" maxlength="500"></div>
-            <div class="col-md-6"><label class="form-label" for="creator-modal-signature">Typed Signature</label><input class="form-control" id="creator-modal-signature" data-creator-field="signature_name" maxlength="255" placeholder="Type full legal name" required></div>
-            <div class="col-md-6"><label class="form-label" for="creator-modal-date">Date Signed</label><input class="form-control" id="creator-modal-date" data-creator-field="declaration_date" type="date" required></div>
-            <div class="col-12"><div class="form-check"><input class="form-check-input" id="creator-modal-confirmed" data-creator-field="declaration_confirmed" type="checkbox" value="1" required><label class="form-check-label" for="creator-modal-confirmed">I confirm that my information and contribution are true and correct, and that I have read and understood the ownership provisions.</label></div></div>
+        <div class="modal-body creator-modal-body">
+          <div class="creator-modal-panel" aria-labelledby="creator-entry-heading">
+            <h6 class="visually-hidden" id="creator-entry-heading">Creator details</h6>
+            <div class="row g-3" id="creator-modal-fields">
+                <div class="col-md-6"><label class="form-label" for="creator-modal-last-name">Last Name</label><input class="form-control" id="creator-modal-last-name" data-creator-field="last_name" maxlength="100" required></div>
+                <div class="col-md-6"><label class="form-label" for="creator-modal-first-name">First Name</label><input class="form-control" id="creator-modal-first-name" data-creator-field="first_name" maxlength="100" required></div>
+                <div class="col-md-6"><label class="form-label" for="creator-modal-middle-initial">Middle Initial</label><input class="form-control" id="creator-modal-middle-initial" data-creator-field="middle_initial" maxlength="1" placeholder="A"></div>
+                <div class="col-md-6"><label class="form-label" for="creator-modal-suffix">Suffix</label><input class="form-control" id="creator-modal-suffix" data-creator-field="suffix" maxlength="20" placeholder="Jr., III"></div>
+                <div class="col-md-6"><label class="form-label" for="creator-modal-email">Email Address</label><input class="form-control" id="creator-modal-email" data-creator-field="email" type="email" maxlength="255" required></div>
+                <div class="col-md-6"><label class="form-label" for="creator-modal-position">Position / Affiliation</label><input class="form-control" id="creator-modal-position" data-creator-field="position_affiliation" maxlength="500" required></div>
+                <div class="col-12"><label class="form-label" for="creator-modal-contribution">Specific Intellectual / Technical Contribution</label><textarea class="form-control" id="creator-modal-contribution" data-creator-field="technical_contribution" rows="2" required></textarea></div>
+                <div class="col-md-4"><label class="form-label" for="creator-modal-percent">Declared Contribution (%)</label><input class="form-control" id="creator-modal-percent" data-creator-field="contribution_percent" type="number" min="0.01" max="100" step="0.01" required></div>
+                <fieldset class="col-12 creator-nature-fieldset">
+                  <legend class="form-label">Nature of contribution <span class="text-danger">*</span></legend>
+                  <div class="row g-2">
+                    @foreach (['conception' => 'Conception', 'identification_essential_element' => 'Identification of an essential element', 'technical_feature' => 'Technical feature', 'experimental_refinement' => 'Experimental refinement', 'reduction_to_practice' => 'Reduction to practice', 'testing_validation' => 'Testing / validation', 'optimization' => 'Optimization', 'other_substantive' => 'Other substantive contribution'] as $nature => $label)
+                    <div class="col-sm-6"><div class="form-check"><input class="form-check-input nature-checkbox" data-nature="{{ $nature }}" id="creator-modal-nature-{{ $nature }}" type="checkbox" value="{{ $nature }}"><label class="form-check-label" for="creator-modal-nature-{{ $nature }}">{{ $label }}</label></div></div>
+                    @endforeach
+                  </div>
+                </fieldset>
+                <div class="col-12 d-none" data-other-contribution-field><label class="form-label" for="creator-modal-other">Specify Other Substantive Contribution</label><input class="form-control" id="creator-modal-other" data-creator-field="contribution_other" maxlength="500"></div>
+            </div>
+            <div class="d-flex justify-content-end mt-3">
+              <button type="button" class="btn btn-primary" id="save-creator"><i class="icon-base ri ri-add-line me-1"></i>Add</button>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-label-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-primary" id="save-creator"><i class="icon-base ri ri-check-line me-1"></i>Save Creator</button>
+          <button type="button" class="btn btn-label-secondary" data-creator-modal-close>Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade creator-list-modal" id="creator-staged-modal" role="dialog" aria-labelledby="creator-staged-heading" aria-hidden="true">
+    <div class="modal-dialog modal-xl idf-modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title fw-bold mb-1" id="creator-staged-heading">Creators to add</h5>
+            <span class="badge bg-label-primary" data-staged-creator-count>0</span>
+          </div>
+          <button type="button" class="btn-close" data-creator-modal-close aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="table-responsive creator-staged-table-wrap">
+            <table class="table table-sm table-hover align-middle creator-staged-table mb-0">
+              <thead><tr><th scope="col">Creator</th><th scope="col">Contribution</th><th scope="col" class="text-end">Action</th></tr></thead>
+              <tbody id="staged-creators-table-body"></tbody>
+            </table>
+          </div>
+          <p class="small text-body-secondary mt-3 mb-0">Add each creator in Creator details, then save the list to show them in Creators and Contributions.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-label-secondary" data-creator-modal-close>Close</button>
+          <button type="button" class="btn btn-primary" id="save-creators"><i class="icon-base ri ri-check-line me-1"></i>Save Creators</button>
         </div>
       </div>
     </div>
@@ -539,11 +646,8 @@ $page = $page ?? 'analytics';
               'technical_contribution' => 'Specific Intellectual / Technical Contribution',
               'contribution_nature' => 'Nature of Contribution',
               'contribution_other' => 'Other Substantive Contribution',
-              'signature_name' => 'Typed Signature',
-              'declaration_date' => 'Date Signed',
-              'declaration_confirmed' => 'Declaration Confirmation',
             ] as $field => $label)
-            <div class="{{ in_array($field, ['technical_contribution', 'contribution_nature', 'contribution_other', 'declaration_confirmed'], true) ? 'col-12' : 'col-md-6' }}" data-creator-view-row="{{ $field }}">
+            <div class="{{ in_array($field, ['technical_contribution', 'contribution_nature', 'contribution_other'], true) ? 'col-12' : 'col-md-6' }}" data-creator-view-row="{{ $field }}">
               <span class="form-label text-uppercase small fw-semibold d-block">{{ $label }}</span>
               <div class="form-control bg-lighter creator-view-value" data-creator-view-value="{{ $field }}" aria-readonly="true"></div>
             </div>
@@ -601,7 +705,6 @@ $page = $page ?? 'analytics';
     window.disclosureStatusChart.render();
   }
 </script>
-<script src="{{ asset('user/js/user-submission-status.js') }}" defer></script>
 @endif
 
 @if ($page === 'form')
@@ -636,9 +739,14 @@ $page = $page ?? 'analytics';
   const inventorsTableBody = document.querySelector('#inventors-table-body');
   const inventorHiddenFields = document.querySelector('#inventor-hidden-fields');
   const creatorModal = document.querySelector('#creator-modal');
+  const creatorListModal = document.querySelector('#creator-staged-modal');
+  document.body.append(creatorModal, creatorListModal);
   const creatorModalTitle = document.querySelector('#creator-modal-title');
   const creatorModalFields = document.querySelector('#creator-modal-fields');
-  const saveCreatorButton = document.querySelector('#save-creator');
+  const addCreatorToListButton = document.querySelector('#save-creator');
+  const saveCreatorsButton = document.querySelector('#save-creators');
+  const stagedCreatorsTableBody = document.querySelector('#staged-creators-table-body');
+  const stagedCreatorCount = document.querySelector('[data-staged-creator-count]');
   const creatorViewModal = document.querySelector('#creator-view-modal');
   const addInventorButton = document.querySelector('#add-inventor');
   const creatorFieldNames = [
@@ -650,16 +758,14 @@ $page = $page ?? 'analytics';
     'position_affiliation',
     'technical_contribution',
     'contribution_percent',
-    'contribution_other',
-    'signature_name',
-    'declaration_date',
-    'declaration_confirmed'
+    'contribution_other'
   ];
   const natureOptions = [...creatorModal.querySelectorAll('.nature-checkbox')].map((checkbox) => ({
     value: checkbox.value,
     label: creatorModal.querySelector(`label[for="${checkbox.id}"]`).textContent.trim()
   }));
   let creators = @json($inventorRows);
+  let pendingCreatorEntries = [];
   let editingCreatorIndex = null;
   const materialsTableBody = document.querySelector('#materials-table-body');
   const materialModal = document.querySelector('#material-modal');
@@ -672,7 +778,12 @@ $page = $page ?? 'analytics';
   let editingMaterialIndex = null;
   const technologyNarratives = @json($narrativeFields);
   const technologyNarrativeLabels = @json($narrativeLabels);
-  const technologyTableColumns = @json($technologyTableColumns);
+  const technologyFileSlots = [...technologyNarratives, 'sample_photo', 'technical_drawing'];
+  const technologyFileLabels = {
+    ...technologyNarrativeLabels,
+    sample_photo: 'Sample picture',
+    technical_drawing: 'Technical drawing'
+  };
   const technologiesTableBody = document.querySelector('#technologies-table-body');
   const technologyHiddenFields = document.querySelector('#technology-hidden-fields');
   const technologyModal = document.querySelector('#technology-modal');
@@ -687,13 +798,14 @@ $page = $page ?? 'analytics';
   const saveTechnologyButton = document.querySelector('#save-technology');
   const addTechnologyButton = document.querySelector('#add-technology');
   let technologies = @json($technologyRows).map((technology) => ({
-    ...technology,
+    technology_title: technology.technology_title || '',
     uploadInputs: {},
     uploadNames: {}
   }));
   let editingTechnologyIndex = null;
   const removedTechnologyFiles = new Set();
   let technologyPreviewUrl = null;
+  let reopenTechnologyViewAfterPreview = false;
   const idfDraftKey = 'idf-draft-user-{{ auth()->id() }}';
   const idfDraftDatabaseName = 'ipms-idf-drafts';
   const idfSubmissionRecoveryKey = 'ipms-idf-submit-recovery-user-{{ auth()->id() }}';
@@ -705,6 +817,171 @@ $page = $page ?? 'analytics';
   let idfDraftSaveQueue = Promise.resolve();
   let idfDraftErrorShown = false;
   let idfDraftUserInteracted = false;
+  let currentIdfPage = 1;
+  const idfPageElements = [...disclosureForm.querySelectorAll('[data-idf-page]')];
+  const idfPageCount = 4;
+  const idfPreviousPageButton = document.querySelector('#idf-previous-page');
+  const idfNextPageButton = document.querySelector('#idf-next-page');
+  const idfSubmitButton = document.querySelector('#submit-idf-disclosure');
+  const driveLinkField = document.querySelector('#file_drive_link');
+  let idfWizardSubmitReentry = false;
+
+  function setIdfWizardPage(page) {
+    currentIdfPage = page;
+    updateRelationshipFields();
+    updateOwnershipFields();
+    idfPageElements.forEach((element) => {
+      const isActivePage = Number(element.dataset.idfPage) === page;
+      element.hidden = !isActivePage;
+    });
+    idfPreviousPageButton.disabled = page === 1;
+    idfNextPageButton.hidden = page === idfPageCount;
+    idfSubmitButton.hidden = page !== idfPageCount;
+    driveLinkField.disabled = page !== 2;
+    driveLinkField.dataset.idfWizardDisabled = page === 2 ? '' : 'true';
+    document.querySelectorAll('[data-wizard-step]').forEach((step) => {
+      const stepNumber = Number(step.dataset.wizardStep);
+      step.classList.toggle('is-complete', stepNumber < page);
+      step.classList.toggle('is-current', stepNumber === page);
+      step.classList.toggle('is-upcoming', stepNumber > page);
+      if (stepNumber === page) step.setAttribute('aria-current', 'step');
+      else step.removeAttribute('aria-current');
+    });
+  }
+
+  function scrollIdfPageToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function validateCurrentIdfPage() {
+    const invalidField = idfPageElements
+      .find((element) => Number(element.dataset.idfPage) === currentIdfPage)
+      ?.querySelector('input:not([type="hidden"]):not(:disabled):invalid, select:not(:disabled):invalid, textarea:not(:disabled):invalid');
+    if (invalidField) {
+      invalidField.reportValidity();
+      invalidField.focus();
+      return false;
+    }
+
+    if (currentIdfPage === 1) {
+      const contributionTotal = creators.reduce(
+        (total, creator) => total + (Number(creator.contribution_percent) || 0),
+        0
+      );
+      const issue = creators.length === 0
+        ? 'Add at least one creator before continuing.'
+        : Math.round(contributionTotal * 100) / 100 !== 100
+          ? 'Creator contributions must total exactly 100% before continuing.'
+          : null;
+      if (issue) {
+        await window.Swal.fire({
+          title: 'Complete creator contributions',
+          text: issue,
+          icon: 'error',
+          confirmButtonText: 'Review creators'
+        });
+        addInventorButton.focus();
+        return false;
+      }
+    }
+
+    if (currentIdfPage === 2) {
+      if (technologies.length === 0) {
+        await window.Swal.fire({
+          title: 'Add a technology',
+          text: 'Add at least one technology before continuing.',
+          icon: 'error',
+          confirmButtonText: 'Add technology'
+        });
+        addTechnologyButton.focus();
+        return false;
+      }
+      for (const technology of technologies) {
+        const missingFiles = technologyFileSlots.filter((slot) =>
+          !technology.uploadInputs?.[slot] && !technology.uploadNames?.[slot]
+        );
+        if (missingFiles.length) {
+          const missingLabels = missingFiles.map((slot) => technologyFileLabels[slot]);
+          await window.Swal.fire({
+            title: 'Complete each technology',
+            text: `Upload a PDF for every required technology document. Missing: ${missingLabels.join(', ')}.`,
+            icon: 'error',
+            confirmButtonText: 'Review technology'
+          });
+          addTechnologyButton.focus();
+          return false;
+        }
+      }
+      if (!driveLinkField.checkValidity()) {
+        bootstrap.Modal.getOrCreateInstance(technologyModal).show();
+        driveLinkField.reportValidity();
+        driveLinkField.focus();
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  window.prepareIdfWizardSubmission = () => {
+    [...disclosureForm.elements].forEach((field) => {
+      if (field.dataset.idfWizardDisabled !== 'true') return;
+      if (field === otherRelationshipInput || field === deedInput) return;
+      delete field.dataset.idfWizardDisabled;
+      field.disabled = false;
+    });
+    idfPageElements.forEach((page) => {
+      page.querySelectorAll('input, select, textarea').forEach((field) => {
+        if (field === otherRelationshipInput || field === deedInput) return;
+        delete field.dataset.idfWizardDisabled;
+        field.disabled = false;
+      });
+    });
+    delete driveLinkField.dataset.idfWizardDisabled;
+    driveLinkField.disabled = false;
+    technologies.forEach((technology, index) => {
+      technologyFileSlots.forEach((slot) => {
+        const fileInput = technology.uploadInputs?.[slot];
+        if (!fileInput?.files?.length) return;
+        fileInput.name = `technologies[${index}][files][${slot}]`;
+        fileInput.setAttribute('form', disclosureForm.id);
+        fileInput.disabled = false;
+      });
+    });
+  };
+  window.showIdfWizardField = (field) => {
+    const pageElement = field.closest('[data-idf-page]');
+    if (!pageElement) return;
+    setIdfWizardPage(Number(pageElement.dataset.idfPage));
+    field.focus();
+  };
+
+  idfPreviousPageButton.addEventListener('click', () => {
+    if (currentIdfPage > 1) {
+      setIdfWizardPage(currentIdfPage - 1);
+      scrollIdfPageToTop();
+    }
+  });
+  idfNextPageButton.addEventListener('click', async () => {
+    if (await validateCurrentIdfPage() && currentIdfPage < idfPageCount) {
+      setIdfWizardPage(currentIdfPage + 1);
+      scrollIdfPageToTop();
+    }
+  });
+  disclosureForm.addEventListener('submit', async (event) => {
+    if (idfWizardSubmitReentry) {
+      idfWizardSubmitReentry = false;
+      return;
+    }
+    event.preventDefault();
+    for (let page = 1; page <= idfPageCount; page += 1) {
+      setIdfWizardPage(page);
+      if (!await validateCurrentIdfPage()) return;
+    }
+    setIdfWizardPage(idfPageCount);
+    idfWizardSubmitReentry = true;
+    disclosureForm.requestSubmit(idfSubmitButton);
+  });
 
   async function showDraftStorageError(title, error) {
     idfDraftStatus.textContent = 'Local draft storage is unavailable.';
@@ -767,7 +1044,8 @@ $page = $page ?? 'analytics';
 
   function collectFormFields() {
     const fields = {};
-    disclosureForm.querySelectorAll('input[name], select[name], textarea[name]').forEach((field) => {
+    [...disclosureForm.elements].forEach((field) => {
+      if (!field.matches?.('input[name], select[name], textarea[name]')) return;
       if (field.type === 'file' || field.type === 'hidden') return;
       if (field.closest('#inventor-hidden-fields, #technology-hidden-fields')) return;
       if (field.type === 'checkbox' || field.type === 'radio') {
@@ -786,13 +1064,23 @@ $page = $page ?? 'analytics';
     }
 
     const savedCreators = JSON.parse(JSON.stringify(creators));
+    const savedPendingCreatorEntries = JSON.parse(JSON.stringify(pendingCreatorEntries));
     if (creatorModal.classList.contains('show')) {
       const creatorDraft = getCreatorModalValues();
       const hasCreatorDraft = Object.entries(creatorDraft)
         .some(([key, value]) => key === 'contribution_nature' ? value.length > 0 : Boolean(value));
       if (hasCreatorDraft) {
-        if (editingCreatorIndex === null) savedCreators.push(creatorDraft);
-        else savedCreators[editingCreatorIndex] = creatorDraft;
+        const draftIndex = editingCreatorIndex === null
+          ? -1
+          : savedPendingCreatorEntries.findIndex(entry => entry.editingIndex === editingCreatorIndex);
+        if (draftIndex >= 0) savedPendingCreatorEntries[draftIndex] = {
+          creator: creatorDraft,
+          editingIndex: editingCreatorIndex
+        };
+        else savedPendingCreatorEntries.push({
+          creator: creatorDraft,
+          editingIndex: editingCreatorIndex
+        });
       }
     }
 
@@ -808,36 +1096,30 @@ $page = $page ?? 'analytics';
     const savedTechnologies = [];
     for (const technology of technologies) {
       const files = {};
-      for (const narrative of technologyNarratives) {
-        const fileInput = technology.uploadInputs?.[narrative];
+      for (const slot of technologyFileSlots) {
+        const fileInput = technology.uploadInputs?.[slot];
         const file = fileInput?.files?.[0];
-        if (file) files[narrative] = await readFileAsDraftData(file);
+        if (file) files[slot] = await readFileAsDraftData(file);
       }
-      savedTechnologies.push({
-        technology_title: technology.technology_title || '',
-        ...Object.fromEntries(technologyNarratives.map(narrative => [narrative, technology[narrative] || ''])),
-        files
-      });
+      savedTechnologies.push({ technology_title: technology.technology_title || '', files });
     }
 
     if (technologyModal.classList.contains('show')) {
       const { technology, uploadInputs } = getTechnologyModalValues();
-      const technologyDraft = { ...technology, files: {} };
+      const technologyDraft = { technology_title: technology.technology_title || '', files: {} };
       const previousTechnology = editingTechnologyIndex === null
         ? null
         : technologies[editingTechnologyIndex];
-      for (const narrative of technologyNarratives) {
-        const selectedFile = uploadInputs[narrative]?.files?.[0];
-        const previousFile = previousTechnology?.uploadInputs?.[narrative]?.files?.[0];
+      for (const slot of technologyFileSlots) {
+        const selectedFile = uploadInputs[slot]?.files?.[0];
+        const previousFile = previousTechnology?.uploadInputs?.[slot]?.files?.[0];
         const file = selectedFile || (
-          !removedTechnologyFiles.has(narrative) ? previousFile : null
+          !removedTechnologyFiles.has(slot) ? previousFile : null
         );
-        if (file) technologyDraft.files[narrative] = await readFileAsDraftData(file);
+        if (file) technologyDraft.files[slot] = await readFileAsDraftData(file);
       }
       const hasTechnologyDraft = technologyDraft.technology_title
-        || technologyNarratives.some(narrative =>
-          technologyDraft[narrative] || technologyDraft.files[narrative]
-        );
+        || technologyFileSlots.some(slot => technologyDraft.files[slot]);
       if (hasTechnologyDraft) {
         if (editingTechnologyIndex === null) savedTechnologies.push(technologyDraft);
         else savedTechnologies[editingTechnologyIndex] = technologyDraft;
@@ -849,6 +1131,7 @@ $page = $page ?? 'analytics';
       version: idfDraftVersion,
       fields: collectFormFields(),
       creators: savedCreators,
+      pendingCreators: savedPendingCreatorEntries,
       materials: savedMaterials.filter(material =>
         materialFieldNames.some(field => String(material[field] ?? '').trim() !== '')
       ),
@@ -883,6 +1166,9 @@ $page = $page ?? 'analytics';
   window.markIdfSubmissionPending = () => {
     sessionStorage.setItem(idfSubmissionRecoveryKey, 'true');
   };
+  window.clearIdfSubmissionPending = () => {
+    sessionStorage.removeItem(idfSubmissionRecoveryKey);
+  };
 
   function makeFileInput(fileData) {
     if (!fileData?.data) return null;
@@ -899,8 +1185,10 @@ $page = $page ?? 'analytics';
   }
 
   function restoreDraftFields(fields) {
-    disclosureForm.querySelectorAll('input[name], select[name], textarea[name]').forEach((field) => {
-      if (field.type === 'file' || field.type === 'hidden' || field.disabled) return;
+    [...disclosureForm.elements].forEach((field) => {
+      if (!field.matches?.('input[name], select[name], textarea[name]')) return;
+      if (field.type === 'file' || field.type === 'hidden'
+        || (field.disabled && field.dataset.idfWizardDisabled !== 'true')) return;
       if (field.closest('#inventor-hidden-fields, #technology-hidden-fields')) return;
       if (!Object.prototype.hasOwnProperty.call(fields, field.name)) return;
       if (field.type === 'checkbox' || field.type === 'radio') {
@@ -922,6 +1210,7 @@ $page = $page ?? 'analytics';
 
     restoreDraftFields(data.fields);
     creators = data.creators;
+    pendingCreatorEntries = Array.isArray(data.pendingCreators) ? data.pendingCreators : [];
     materials = data.materials.filter(material =>
       materialFieldNames.some(field => String(material[field] ?? '').trim() !== '')
     );
@@ -929,13 +1218,13 @@ $page = $page ?? 'analytics';
       const uploadInputs = {};
       const uploadNames = {};
       Object.entries(technology.files || {}).forEach(([narrative, fileData]) => {
-        if (!technologyNarratives.includes(narrative)) return;
+        if (!technologyFileSlots.includes(narrative)) return;
         const input = makeFileInput(fileData);
         if (!input) return;
         uploadInputs[narrative] = input;
         uploadNames[narrative] = fileData.name;
       });
-      return { ...technology, uploadInputs, uploadNames };
+      return { technology_title: technology.technology_title || '', uploadInputs, uploadNames };
     });
 
     for (const input of disclosureForm.querySelectorAll('input[type="file"][name^="attachments["]')) {
@@ -948,6 +1237,7 @@ $page = $page ?? 'analytics';
     updateRelationshipFields();
     updateOwnershipFields();
     updateCreatorRows();
+    renderStagedCreatorRows();
     updateCosts();
     renderTechnologies();
     updateAttachmentCount();
@@ -1039,7 +1329,8 @@ $page = $page ?? 'analytics';
 
   function resetCreatorModal() {
     editingCreatorIndex = null;
-    creatorModalTitle.textContent = 'Add Creator';
+    creatorModalTitle.textContent = 'Creator details';
+    addCreatorToListButton.innerHTML = '<i class="icon-base ri ri-add-line me-1"></i>Add';
     creatorModalFields.querySelectorAll('[data-creator-field]').forEach((field) => {
       if (field.type === 'checkbox') field.checked = false;
       else field.value = '';
@@ -1154,6 +1445,67 @@ $page = $page ?? 'analytics';
     renderCreatorHiddenFields();
   }
 
+  function renderStagedCreatorRows() {
+    stagedCreatorsTableBody.replaceChildren();
+    stagedCreatorCount.textContent = String(pendingCreatorEntries.length);
+
+    if (pendingCreatorEntries.length === 0) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 3;
+      cell.className = 'text-center text-body-secondary py-4';
+      cell.textContent = 'No creators added yet.';
+      row.append(cell);
+      stagedCreatorsTableBody.append(row);
+      return;
+    }
+
+    pendingCreatorEntries.forEach(({ creator, editingIndex }, index) => {
+      const row = document.createElement('tr');
+      const nameCell = document.createElement('td');
+      nameCell.textContent = creatorFullName(creator);
+      if (editingIndex !== null) {
+        const editLabel = document.createElement('small');
+        editLabel.className = 'd-block text-body-secondary';
+        editLabel.textContent = 'Update existing creator';
+        nameCell.append(editLabel);
+      }
+      const contributionCell = document.createElement('td');
+      contributionCell.textContent = `${Number(creator.contribution_percent).toFixed(2)}%`;
+      const actionCell = document.createElement('td');
+      actionCell.className = 'text-end';
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.className = 'btn btn-sm btn-label-danger';
+      deleteButton.dataset.creatorAction = 'delete';
+      deleteButton.dataset.creatorIndex = String(index);
+      deleteButton.dataset.stagedCreator = 'true';
+      deleteButton.setAttribute('aria-label', `Remove ${creatorFullName(creator)} from the list`);
+      deleteButton.innerHTML = '<i class="icon-base ri ri-delete-bin-line" aria-hidden="true"></i>';
+      actionCell.append(deleteButton);
+      row.append(nameCell, contributionCell, actionCell);
+      stagedCreatorsTableBody.append(row);
+    });
+  }
+
+  function applyStagedCreators() {
+    const missingCreator = pendingCreatorEntries.some(({ editingIndex }) =>
+      editingIndex !== null && !creators[editingIndex]
+    );
+    if (missingCreator) {
+      throw new Error('A creator being updated could not be found. Reopen the creator list and try again.');
+    }
+
+    pendingCreatorEntries.forEach(({ creator, editingIndex }) => {
+      if (editingIndex === null) {
+        creators.push(creator);
+        return;
+      }
+      creators[editingIndex] = creator;
+    });
+    pendingCreatorEntries = [];
+  }
+
   function renderCreatorHiddenFields() {
     inventorHiddenFields.replaceChildren();
     creators.forEach((creator, index) => {
@@ -1161,9 +1513,7 @@ $page = $page ?? 'analytics';
         const input = document.createElement('input');
         input.type = 'hidden';
         input.name = `inventors[${index}][${key}]`;
-        input.value = key === 'declaration_confirmed'
-          ? (creator[key] ? '1' : '')
-          : (creator[key] ?? '');
+        input.value = creator[key] ?? '';
         inventorHiddenFields.append(input);
       }
       for (const nature of creator.contribution_nature ?? []) {
@@ -1231,10 +1581,7 @@ $page = $page ?? 'analytics';
       contribution_nature: (creator.contribution_nature ?? [])
         .map((nature) => natureLabels.get(nature) ?? nature)
         .join(', '),
-      contribution_other: creator.contribution_other,
-      signature_name: creator.signature_name,
-      declaration_date: creator.declaration_date,
-      declaration_confirmed: creator.declaration_confirmed ? 'Confirmed' : 'Not confirmed'
+      contribution_other: creator.contribution_other
     };
     Object.entries(values).forEach(([field, value]) => {
       const row = creatorViewModal.querySelector(`[data-creator-view-row="${field}"]`);
@@ -1254,22 +1601,41 @@ $page = $page ?? 'analytics';
   }
 
   function showCreatorModal() {
-    const trigger = document.createElement('button');
-    trigger.type = 'button';
-    trigger.className = 'd-none';
-    trigger.dataset.bsToggle = 'modal';
-    trigger.dataset.bsTarget = '#creator-modal';
-    document.body.append(trigger);
-    trigger.click();
-    trigger.remove();
+    renderStagedCreatorRows();
+    creatorListModal.classList.add('show');
+    creatorListModal.style.display = 'block';
+    creatorListModal.setAttribute('aria-hidden', 'false');
+    creatorListModal.setAttribute('aria-modal', 'true');
+    bootstrap.Modal.getOrCreateInstance(creatorModal, {
+      backdrop: 'static',
+      keyboard: false,
+      focus: false
+    }).show();
   }
+
+  async function hideCreatorModalPair() {
+    creatorListModal.classList.remove('show');
+    creatorListModal.style.display = 'none';
+    creatorListModal.setAttribute('aria-hidden', 'true');
+    creatorListModal.removeAttribute('aria-modal');
+
+    const entryModalHidden = new Promise(resolve => {
+      creatorModal.addEventListener('hidden.bs.modal', resolve, { once: true });
+    });
+    bootstrap.Modal.getOrCreateInstance(creatorModal).hide();
+    await entryModalHidden;
+  }
+
+  document.querySelectorAll('[data-creator-modal-close]').forEach(button => {
+    button.addEventListener('click', hideCreatorModalPair);
+  });
 
   function updateCreatorRows() {
     renderCreatorTable();
   }
 
   function updateAttachmentCount() {
-    const count = [...disclosureForm.querySelectorAll('input[type="file"]')]
+    const count = [...document.querySelectorAll('#new-disclosure-form input[type="file"], #technology-modal input[type="file"]')]
       .filter((input) => input.files.length > 0).length;
     document.querySelector('#attachment-count').value = count;
   }
@@ -1394,7 +1760,10 @@ $page = $page ?? 'analytics';
       field.value = '';
     });
     technologyModalFields.querySelectorAll('[data-existing-technology-file]').forEach((label) => {
-      label.replaceChildren();
+      label.textContent = '';
+    });
+    technologyModalFields.querySelectorAll('[data-technology-file-message]').forEach((message) => {
+      message.textContent = '';
     });
     technologyModalFields.querySelectorAll('[data-remove-technology-file]').forEach((button) => {
       button.classList.add('d-none');
@@ -1403,38 +1772,49 @@ $page = $page ?? 'analytics';
   }
 
   function updateTechnologyFileStatus(narrative) {
-    const upload = technologyModalFields.querySelector(`[data-technology-file="${narrative}"]`);
-    const status = technologyModalFields.querySelector(`[data-existing-technology-file="${narrative}"]`);
+    const upload = getTechnologyFilePicker(narrative);
+    const fileName = technologyModalFields.querySelector(`[data-existing-technology-file="${narrative}"]`);
+    const message = technologyModalFields.querySelector(`[data-technology-file-message="${narrative}"]`);
     const removeButton = technologyModalFields.querySelector(`[data-remove-technology-file="${narrative}"]`);
     const originalTechnology = editingTechnologyIndex === null ? null : technologies[editingTechnologyIndex];
     const selectedFile = upload?.files?.[0];
     const existingFileName = removedTechnologyFiles.has(narrative)
       ? ''
       : originalTechnology?.uploadNames?.[narrative] || originalTechnology?.uploadInputs?.[narrative]?.files?.[0]?.name || '';
+    const nativeFileInput = upload?.classList.contains('form-control');
 
-    if (selectedFile) {
-      status.textContent = '';
-    } else if (existingFileName) {
-      status.textContent = `Attached PDF: ${existingFileName}`;
-    } else if (removedTechnologyFiles.has(narrative)) {
-      status.textContent = 'PDF will be removed when you save this technology.';
+    if (nativeFileInput) {
+      fileName.textContent = removedTechnologyFiles.has(narrative)
+        ? 'PDF will be removed when you save this technology.'
+        : selectedFile
+          ? existingFileName
+            ? `Selected PDF: ${selectedFile.name} (replaces ${existingFileName})`
+            : `Selected PDF: ${selectedFile.name}`
+          : existingFileName ? `Attached PDF: ${existingFileName}` : '';
     } else {
-      status.textContent = '';
+      fileName.textContent = selectedFile?.name || existingFileName || 'No file chosen';
+      message.textContent = removedTechnologyFiles.has(narrative)
+        ? 'PDF will be removed when you save this technology.'
+        : '';
     }
 
     removeButton.classList.toggle('d-none', !selectedFile && !existingFileName);
+  }
+
+  function getTechnologyFilePicker(slot) {
+    return technologyModalFields.querySelector(`[data-technology-file-replacement="true"][data-technology-file="${slot}"]`)
+      || technologyModalFields.querySelector(`[data-technology-file="${slot}"]`);
   }
 
   function getTechnologyModalValues() {
     const technology = { technology_title: technologyModalFields.querySelector('[data-technology-field="technology_title"]').value.trim() };
     const uploadInputs = {};
     const uploadNames = {};
-    technologyNarratives.forEach((narrative) => {
-      technology[narrative] = technologyModalFields.querySelector(`[data-technology-field="${narrative}"]`).value.trim();
-      const upload = technologyModalFields.querySelector(`[data-technology-file="${narrative}"]`);
+    technologyFileSlots.forEach((slot) => {
+      const upload = getTechnologyFilePicker(slot);
       if (upload?.files?.length) {
-        uploadInputs[narrative] = upload;
-        uploadNames[narrative] = upload.files[0].name;
+        uploadInputs[slot] = upload;
+        uploadNames[slot] = upload.files[0].name;
       }
     });
     return { technology, uploadInputs, uploadNames };
@@ -1456,23 +1836,26 @@ $page = $page ?? 'analytics';
       titleInput.name = `technologies[${index}][technology_title]`;
       titleInput.value = technology.technology_title ?? '';
       technologyHiddenFields.append(titleInput);
-      Object.entries(technologyTableColumns).forEach(([field, label]) => {
-        const fileInput = technology.uploadInputs?.[field];
-        const fileName = technology.uploadNames?.[field] || fileInput?.files?.[0]?.name || '';
-        const narrativeText = technology[field]?.trim() || '';
-        const isComplete = Boolean(narrativeText || fileName);
-        const statusCell = document.createElement('td');
-        statusCell.className = 'technology-status-cell text-center text-nowrap';
-        const status = document.createElement('span');
-        status.className = `technology-status-icon ${isComplete ? 'is-complete' : 'is-incomplete'}`;
-        status.setAttribute('aria-label', `${label}: ${isComplete ? 'complete' : 'incomplete'}`);
-        status.title = `${label}: ${isComplete ? 'Complete' : 'Incomplete'}`;
-        const icon = document.createElement('i');
-        icon.className = `icon-base ri ${isComplete ? 'ri-checkbox-circle-fill' : 'ri-close-circle-fill'}`;
-        icon.setAttribute('aria-hidden', 'true');
-        status.append(icon);
-        statusCell.append(status);
-        row.append(statusCell);
+      technologyFileSlots.forEach((slot) => {
+        const fileInput = technology.uploadInputs?.[slot];
+        const fileName = technology.uploadNames?.[slot] || fileInput?.files?.[0]?.name;
+        const fileCell = document.createElement('td');
+        fileCell.className = 'technology-file-status-cell text-center';
+        const fileStatus = document.createElement('span');
+        fileStatus.setAttribute('aria-label', `${fileName ? 'Uploaded' : 'Not uploaded'}: ${technologyFileLabels[slot]}`);
+        fileStatus.title = fileName ? `${technologyFileLabels[slot]}: ${fileName}` : `Not uploaded: ${technologyFileLabels[slot]}`;
+        if (fileName) {
+          fileStatus.className = 'technology-file-check text-success';
+          const checkIcon = document.createElement('i');
+          checkIcon.className = 'icon-base ri ri-check-line';
+          checkIcon.setAttribute('aria-hidden', 'true');
+          fileStatus.append(checkIcon);
+        } else {
+          fileStatus.className = 'technology-file-missing text-body-secondary';
+          fileStatus.textContent = '—';
+        }
+        fileCell.append(fileStatus);
+        row.append(fileCell);
       });
       const actionCell = document.createElement('td');
       actionCell.className = 'text-end text-nowrap';
@@ -1497,7 +1880,6 @@ $page = $page ?? 'analytics';
         button.type = 'button';
         button.className = `dropdown-item${action === 'delete' ? ' text-danger' : ''}`;
         button.dataset.technologyAction = action;
-        button.disabled = action === 'delete' && technologies.length === 1;
         button.innerHTML = `<i class="icon-base ri ${icon} me-2" aria-hidden="true"></i>${label}`;
         item.append(button);
         menu.append(item);
@@ -1507,30 +1889,34 @@ $page = $page ?? 'analytics';
       row.append(actionCell);
       technologiesTableBody.append(row);
 
-      technologyNarratives.forEach((narrative) => {
-        const hidden = document.createElement('input');
-        hidden.type = 'hidden';
-        hidden.name = `technologies[${index}][${narrative}]`;
-        hidden.value = technology[narrative] ?? '';
-        technologyHiddenFields.append(hidden);
+      technologyFileSlots.forEach((narrative) => {
         const fileInput = technology.uploadInputs?.[narrative];
         if (fileInput) {
+          const uploadControl = technologyModalFields.querySelector(`[data-technology-upload-slot="${narrative}"]`);
+          const isCurrentPicker = uploadControl.contains(fileInput);
+          if (isCurrentPicker) {
+            const replacement = fileInput.cloneNode(false);
+            replacement.id = `technology-modal-file-${narrative}`;
+            replacement.name = '';
+            replacement.removeAttribute('form');
+            replacement.value = '';
+            replacement.dataset.technologyFileReplacement = 'true';
+            const fileLabel = technologyModalFields.querySelector(`label[for="technology-modal-file-${narrative}"]`);
+            if (fileLabel) fileLabel.htmlFor = replacement.id;
+            fileInput.replaceWith(replacement);
+          }
           fileInput.id = `technology-upload-${index}-${narrative}`;
           fileInput.name = `technologies[${index}][files][${narrative}]`;
+          fileInput.setAttribute('form', disclosureForm.id);
+          fileInput.disabled = false;
           technologyHiddenFields.append(fileInput);
-          const slot = technologyModalFields.querySelector(`[data-technology-upload-slot="${narrative}"]`);
-          const replacement = fileInput.cloneNode(false);
-          replacement.id = `technology-modal-file-${index}-${narrative}-replacement`;
-          replacement.name = '';
-          replacement.value = '';
-          slot.insertBefore(replacement, slot.querySelector('[data-remove-technology-file]'));
         }
       });
     });
     if (technologies.length === 0) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = Object.keys(technologyTableColumns).length + 2;
+      cell.colSpan = technologyFileSlots.length + 2;
       cell.className = 'text-center text-body-secondary py-4';
       cell.textContent = 'No technologies have been added yet.';
       row.append(cell);
@@ -1546,10 +1932,12 @@ $page = $page ?? 'analytics';
     removedTechnologyFiles.clear();
     editingTechnologyIndex = index;
     technologyModalTitle.textContent = 'Edit Technology';
+    saveTechnologyButton.innerHTML = '<i class="icon-base ri ri-check-line me-1"></i>Save Changes';
     technologyModalFields.querySelector('[data-technology-field="technology_title"]').value = technology.technology_title ?? '';
-    technologyNarratives.forEach((narrative) => {
-      technologyModalFields.querySelector(`[data-technology-field="${narrative}"]`).value = technology[narrative] ?? '';
-      updateTechnologyFileStatus(narrative);
+    technologyFileSlots.forEach((slot) => {
+      const picker = getTechnologyFilePicker(slot);
+      if (picker) picker.value = '';
+      updateTechnologyFileStatus(slot);
     });
     bootstrap.Modal.getOrCreateInstance(technologyModal).show();
   }
@@ -1576,27 +1964,32 @@ $page = $page ?? 'analytics';
 
       const { technology, uploadInputs, uploadNames } = getTechnologyModalValues();
       const originalTechnology = editingTechnologyIndex === null ? null : technologies[editingTechnologyIndex];
-      const missingNarratives = technologyNarratives.filter((narrative) => {
-        const existingUpload = !removedTechnologyFiles.has(narrative) && originalTechnology?.uploadInputs?.[narrative];
-        return !technology[narrative] && !uploadInputs[narrative] && !existingUpload;
+      const missingRequiredFiles = technologyFileSlots.filter((slot) => {
+        const existingUpload = !removedTechnologyFiles.has(slot)
+          && (originalTechnology?.uploadInputs?.[slot] || originalTechnology?.uploadNames?.[slot]);
+        return !uploadInputs[slot]?.files?.length && !existingUpload;
       });
-
-      if (missingNarratives.length) {
+      if (missingRequiredFiles.length) {
+        const labels = missingRequiredFiles.map((slot) => technologyFileLabels[slot]).join(' and ');
         await window.Swal.fire({
-          title: 'Required narratives are missing',
-          text: `Provide text or a PDF for: ${missingNarratives.map((narrative) => technologyNarrativeLabels[narrative]).join(', ')}.`,
+          title: 'Technology PDFs are required',
+          text: `Upload a PDF for every required technology document: ${labels}.`,
           icon: 'error',
-          confirmButtonText: 'Review narratives'
+          confirmButtonText: 'Review files'
         });
-        technologyModalFields.querySelector(`[data-technology-field="${missingNarratives[0]}"]`).focus();
+        getTechnologyFilePicker(missingRequiredFiles[0])?.focus();
         return;
       }
 
       if (originalTechnology) {
-        technologyNarratives.forEach((narrative) => {
-          if (uploadInputs[narrative] || removedTechnologyFiles.has(narrative) || !originalTechnology.uploadInputs?.[narrative]) return;
-          uploadInputs[narrative] = originalTechnology.uploadInputs[narrative];
-          uploadNames[narrative] = originalTechnology.uploadNames[narrative];
+        technologyFileSlots.forEach((narrative) => {
+          if (uploadInputs[narrative] || removedTechnologyFiles.has(narrative)) return;
+          if (originalTechnology.uploadInputs?.[narrative]) {
+            uploadInputs[narrative] = originalTechnology.uploadInputs[narrative];
+          }
+          if (originalTechnology.uploadNames?.[narrative]) {
+            uploadNames[narrative] = originalTechnology.uploadNames[narrative];
+          }
         });
       }
 
@@ -1659,10 +2052,13 @@ $page = $page ?? 'analytics';
   function openTechnologyModal() {
     if (technologies.length >= 2) return;
     resetTechnologyModal();
+    saveTechnologyButton.innerHTML = '<i class="icon-base ri ri-check-line me-1"></i>Save Technology';
   }
 
   addInventorButton.addEventListener('click', () => {
     resetCreatorModal();
+    renderStagedCreatorRows();
+    showCreatorModal();
   });
 
   creatorModal.querySelectorAll('.nature-checkbox').forEach((checkbox) => {
@@ -1672,8 +2068,8 @@ $page = $page ?? 'analytics';
     });
   });
 
-  saveCreatorButton.addEventListener('click', async () => {
-    saveCreatorButton.disabled = true;
+  addCreatorToListButton.addEventListener('click', async () => {
+    addCreatorToListButton.disabled = true;
     try {
       if (typeof window.Swal?.fire !== 'function') {
         throw new Error('SweetAlert is not ready. Refresh the page and try again.');
@@ -1705,52 +2101,92 @@ $page = $page ?? 'analytics';
       }
 
       const creator = getCreatorModalValues();
-      const isEditing = editingCreatorIndex !== null;
-      const result = await window.Swal.fire({
-        title: isEditing ? 'Save creator changes?' : 'Add this creator?',
-        text: `${creator.last_name}, ${creator.first_name} will be ${isEditing ? 'updated' : 'added'} to the disclosure.`,
-        target: creatorModal,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: isEditing ? 'Save changes' : 'Add creator',
-        cancelButtonText: 'Review details',
-        reverseButtons: true,
-        focusCancel: true
-      });
-      if (!result.isConfirmed) return;
+      const editingIndex = editingCreatorIndex;
+      const stagedIndex = editingIndex === null
+        ? -1
+        : pendingCreatorEntries.findIndex(entry => entry.editingIndex === editingIndex);
+      if (stagedIndex >= 0) pendingCreatorEntries[stagedIndex] = { creator, editingIndex };
+      else pendingCreatorEntries.push({ creator, editingIndex });
 
-      if (editingCreatorIndex === null) creators.push(creator);
-      else if (creators[editingCreatorIndex]) creators[editingCreatorIndex] = creator;
-      else throw new Error('The creator being edited could not be found.');
-
-      updateCreatorRows();
+      renderStagedCreatorRows();
       scheduleDraftSave();
-      const modalHidden = new Promise((resolve) => {
-        creatorModal.addEventListener('hidden.bs.modal', resolve, { once: true });
-      });
-      bootstrap.Modal.getOrCreateInstance(creatorModal).hide();
-      await modalHidden;
-      await window.Swal.fire({
-        title: isEditing ? 'Creator updated successfully' : 'Creator added successfully',
-        text: `${creator.first_name} ${creator.last_name} has been ${isEditing ? 'updated' : 'added'} to the disclosure.`,
-        icon: 'success',
-        timer: 1800,
-        showConfirmButton: false
-      });
+      resetCreatorModal();
+      creatorModalFields.querySelector('[data-creator-field="last_name"]').focus();
     } catch (error) {
-      console.error('Creator save failed:', error);
+      console.error('Could not add creator to the staged list:', error);
       if (typeof window.Swal?.fire === 'function') {
         await window.Swal.fire({
-          title: 'Could not save creator',
-          text: error instanceof Error ? error.message : 'An unexpected error occurred while saving the creator.',
+          title: 'Could not add creator',
+          text: error instanceof Error ? error.message : 'An unexpected error occurred while adding the creator.',
           target: creatorModal,
           icon: 'error',
           confirmButtonText: 'OK'
         });
       }
     } finally {
-      saveCreatorButton.disabled = false;
+      addCreatorToListButton.disabled = false;
     }
+  });
+
+  saveCreatorsButton.addEventListener('click', async () => {
+    if (saveCreatorsButton.disabled) return;
+    if (pendingCreatorEntries.length === 0) {
+      await window.Swal.fire({
+        title: 'No creators to save',
+        text: 'Add at least one creator to the list first.',
+        target: creatorListModal,
+        icon: 'info',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+
+    saveCreatorsButton.disabled = true;
+    try {
+      const creatorNames = pendingCreatorEntries
+        .map(({ creator }) => creatorFullName(creator))
+        .join('\n');
+      const result = await window.Swal.fire({
+        title: 'Save these creators?',
+        text: creatorNames,
+        target: creatorListModal,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Save Creators',
+        cancelButtonText: 'Continue editing',
+        reverseButtons: true,
+        focusCancel: true
+      });
+      if (!result.isConfirmed) return;
+
+      applyStagedCreators();
+      updateCreatorRows();
+      scheduleDraftSave();
+      renderStagedCreatorRows();
+      await hideCreatorModalPair();
+    } catch (error) {
+      console.error('Could not save staged creators:', error);
+      await window.Swal.fire({
+        title: 'Could not save creators',
+        text: error instanceof Error ? error.message : 'An unexpected error occurred while saving creators.',
+        target: creatorListModal,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+    } finally {
+      saveCreatorsButton.disabled = false;
+    }
+  });
+
+  stagedCreatorsTableBody.addEventListener('click', event => {
+    const actionButton = event.target.closest('[data-staged-creator]');
+    if (!actionButton) return;
+    document.dispatchEvent(new CustomEvent('creator:delete', {
+      detail: {
+        index: Number(actionButton.dataset.creatorIndex),
+        staged: true
+      }
+    }));
   });
 
   inventorsTableBody.addEventListener('click', (event) => {
@@ -1770,8 +2206,21 @@ $page = $page ?? 'analytics';
 
   document.addEventListener('creator:delete-confirmed', (event) => {
     const index = Number(event.detail.index);
+    if (event.detail.staged) {
+      if (!Number.isInteger(index) || !pendingCreatorEntries[index]) return;
+      pendingCreatorEntries.splice(index, 1);
+      renderStagedCreatorRows();
+      scheduleDraftSave();
+      return;
+    }
     if (!Number.isInteger(index) || !creators[index]) return;
+    pendingCreatorEntries = pendingCreatorEntries
+      .filter(entry => entry.editingIndex !== index)
+      .map(entry => entry.editingIndex > index
+        ? { ...entry, editingIndex: entry.editingIndex - 1 }
+        : entry);
     creators.splice(index, 1);
+    renderStagedCreatorRows();
     updateCreatorRows();
     scheduleDraftSave();
   });
@@ -1866,52 +2315,10 @@ $page = $page ?? 'analytics';
   creatorModalFields.addEventListener('change', scheduleDraftSave);
   materialModalFields.addEventListener('input', scheduleDraftSave);
   technologyModalFields.addEventListener('input', scheduleDraftSave);
-  technologyModalFields.addEventListener('change', async (event) => {
+  technologyModalFields.addEventListener('change', (event) => {
     const upload = event.target.closest('[data-technology-file]');
     if (!upload) return;
     const narrative = upload.dataset.technologyFile;
-    const narrativeField = technologyModalFields.querySelector(`[data-technology-field="${narrative}"]`);
-    const selectedFile = upload.files?.[0];
-    if (selectedFile && selectedFile.name.split('.').pop()?.toLowerCase() === 'pdf' && narrativeField.value.trim()) {
-      if (typeof window.Swal?.fire !== 'function') {
-        upload.value = '';
-        updateTechnologyFileStatus(narrative);
-        console.error('Could not confirm replacing the narrative because SweetAlert is unavailable.');
-        return;
-      }
-
-      upload.disabled = true;
-      try {
-        const result = await window.Swal.fire({
-          title: 'Narrative already exists',
-          text: `A text narrative already exists for ${technologyNarrativeLabels[narrative]}. Proceeding will replace the text with the uploaded PDF.`,
-          target: technologyModal,
-          icon: 'warning',
-          showCancelButton: true,
-          confirmButtonText: 'Proceed',
-          cancelButtonText: 'Cancel',
-          reverseButtons: true,
-          focusCancel: true
-        });
-        if (result.isConfirmed) {
-          narrativeField.value = '';
-        } else {
-          upload.value = '';
-        }
-      } catch (error) {
-        upload.value = '';
-        console.error('Could not confirm replacing the technology narrative:', error);
-        await window.Swal.fire({
-          title: 'Could not replace narrative',
-          text: 'The PDF was not selected. Please try again.',
-          target: technologyModal,
-          icon: 'error',
-          confirmButtonText: 'OK'
-        });
-      } finally {
-        upload.disabled = false;
-      }
-    }
     updateTechnologyFileStatus(narrative);
     updateAttachmentCount();
     scheduleDraftSave();
@@ -1974,6 +2381,10 @@ $page = $page ?? 'analytics';
     technologyFilePreviewFrame.src = 'about:blank';
     if (technologyPreviewUrl) URL.revokeObjectURL(technologyPreviewUrl);
     technologyPreviewUrl = null;
+    if (reopenTechnologyViewAfterPreview) {
+      reopenTechnologyViewAfterPreview = false;
+      bootstrap.Modal.getOrCreateInstance(technologyNarrativeViewModal).show();
+    }
   });
 
   function openTechnologyPdfPreview(index, narrative, fileName) {
@@ -1991,7 +2402,9 @@ $page = $page ?? 'analytics';
     if (!previewButton) return;
     const technologyIndex = Number(previewButton.dataset.technologyIndex);
     const narrative = previewButton.dataset.technologyFilePreview;
+    if (!technologies[technologyIndex]?.uploadInputs?.[narrative]?.files?.[0]) return;
     const viewModal = bootstrap.Modal.getOrCreateInstance(technologyNarrativeViewModal);
+    reopenTechnologyViewAfterPreview = true;
     technologyNarrativeViewModal.addEventListener('hidden.bs.modal', () => {
       openTechnologyPdfPreview(technologyIndex, narrative, previewButton.dataset.technologyFileName);
     }, { once: true });
@@ -2006,8 +2419,8 @@ $page = $page ?? 'analytics';
       const technology = technologies[index];
       technologyNarrativeViewTitle.textContent = technology.technology_title || 'Technology Details';
       technologyNarrativeViewContent.replaceChildren();
-      technologyNarratives.forEach((narrative) => {
-        const value = technology[narrative]?.trim();
+      technologyFileSlots.forEach((narrative) => {
+        const value = technologyNarratives.includes(narrative) ? technology[narrative]?.trim() : '';
         const fileInput = technology.uploadInputs?.[narrative];
         const fileName = technology.uploadNames?.[narrative] || fileInput?.files?.[0]?.name;
         if (!value && !fileName) return;
@@ -2047,8 +2460,13 @@ $page = $page ?? 'analytics';
           field.append(accordion);
         }
         if (fileName) {
+          const fileCard = document.createElement('section');
+          fileCard.className = 'technology-view-file-card';
+          const fileHeading = document.createElement('h6');
+          fileHeading.className = 'technology-view-file-card__title';
+          fileHeading.textContent = technologyFileLabels[narrative];
           const fileBanner = document.createElement('div');
-          fileBanner.className = 'd-flex align-items-center gap-3';
+          fileBanner.className = 'd-flex align-items-center gap-3 technology-view-file-card__content';
           const fileIcon = document.createElement('i');
           fileIcon.className = 'icon-base ri ri-file-pdf-2-line icon-24px text-danger flex-shrink-0';
           fileIcon.setAttribute('aria-hidden', 'true');
@@ -2067,11 +2485,12 @@ $page = $page ?? 'analytics';
           previewButton.dataset.technologyFilePreview = narrative;
           previewButton.dataset.technologyIndex = String(index);
           previewButton.dataset.technologyFileName = fileName;
-          previewButton.setAttribute('aria-label', `View ${technologyNarrativeLabels[narrative]} PDF: ${fileName}`);
+          previewButton.setAttribute('aria-label', `View ${technologyFileLabels[narrative]} PDF: ${fileName}`);
           previewButton.title = `View PDF: ${fileName}`;
           previewButton.innerHTML = '<i class="icon-base ri ri-eye-line" aria-hidden="true"></i>';
           fileBanner.append(fileIcon, fileDetails, previewButton);
-          field.append(fileBanner);
+          fileCard.append(fileHeading, fileBanner);
+          field.append(fileCard);
         }
         technologyNarrativeViewContent.append(field);
       });
@@ -2082,12 +2501,15 @@ $page = $page ?? 'analytics';
       openTechnologyForEdit(index);
       return;
     }
-    document.dispatchEvent(new CustomEvent('technology:delete', { detail: { index } }));
+    const technology = technologies[index];
+    if (!technology) return;
+    document.dispatchEvent(new CustomEvent('technology:delete', {
+      detail: { index, title: technology.technology_title }
+    }));
   });
-
   document.addEventListener('technology:delete-confirmed', (event) => {
     const index = Number(event.detail.index);
-    if (!Number.isInteger(index) || !technologies[index] || technologies.length === 1) return;
+    if (!Number.isInteger(index) || !technologies[index]) return;
     technologies.splice(index, 1);
     renderTechnologies();
     scheduleDraftSave();
@@ -2107,6 +2529,7 @@ $page = $page ?? 'analytics';
   updateCreatorRows();
   updateCosts();
   renderTechnologies();
+  setIdfWizardPage(1);
 
   disclosureForm.addEventListener('change', (event) => {
     idfDraftUserInteracted = true;
@@ -2233,6 +2656,6 @@ $page = $page ?? 'analytics';
     }
   })();
 </script>
-<script src="{{ asset('user/js/innovation-disclosure.js') }}" defer></script>
+<script src="{{ asset('user/js/innovation-disclosure.js') }}?v={{ filemtime(public_path('user/js/innovation-disclosure.js')) }}" defer></script>
 @endif
 @endsection

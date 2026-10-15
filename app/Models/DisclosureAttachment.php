@@ -17,6 +17,7 @@ class DisclosureAttachment extends Model
     'version',
     'submitted_at',
     'is_latest_submission',
+    'review_status',
     'needs_revision',
     'revision_notes',
   ];

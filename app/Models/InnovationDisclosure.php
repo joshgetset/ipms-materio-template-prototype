@@ -60,6 +60,15 @@ class InnovationDisclosure extends Model
     ];
   }
 
+  public function getTechnologyTypeLabelAttribute(): string
+  {
+    return match ($this->technology_type) {
+      'mechanical', 'mechanical_engineering' => 'Mechanical',
+      'chemical' => 'Chemical',
+      default => str_replace('_', ' ', ucfirst((string) $this->technology_type)),
+    };
+  }
+
   public function user(): BelongsTo
   {
     return $this->belongsTo(User::class);

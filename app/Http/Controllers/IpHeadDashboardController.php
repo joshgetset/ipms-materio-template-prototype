@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\InnovationDisclosure;
 use App\Models\DisclosureAttachment;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
@@ -11,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -54,7 +56,8 @@ class IpHeadDashboardController extends Controller
   public function showReview(Request $request, InnovationDisclosure $disclosure): View
   {
     $this->ensureIpHead($request);
-    $disclosure->load(['user', 'attachments', 'inventors', 'costItems', 'technologies.files']);
+    $disclosure->load(['user', 'attachments', 'inventors', 'costItems', 'technologies.files.versions']);
+    $reviewableAttachments = $this->reviewableAttachments($disclosure);
     $queue = $request->query('queue') === 'reviewed' ? 'reviewed' : 'for-review';
     $pageParameter = $queue === 'reviewed' ? 'reviewedPage' : 'reviewQueuePage';
 
@@ -63,6 +66,7 @@ class IpHeadDashboardController extends Controller
       'page' => max(1, $request->integer('page', $request->integer($pageParameter, 1))),
       'pageParameter' => $pageParameter,
       'queue' => $queue,
+      'reviewableAttachments' => $reviewableAttachments,
     ]);
   }
 
@@ -189,41 +193,30 @@ class IpHeadDashboardController extends Controller
     $this->ensureIpHead($request);
 
     $validated = $request->validate([
-      'status' => ['required', Rule::in(['under_review', 'returned', 'endorsed'])],
-      'review_notes' => [
-        Rule::requiredIf($request->input('status') === 'returned'),
-        'nullable',
-        'string',
-        'max:3000',
-      ],
+      'status' => ['required', Rule::in(['endorsed'])],
       'queue' => ['nullable', Rule::in(['for-review', 'reviewed'])],
       'page' => ['nullable', 'integer', 'min:1'],
     ]);
 
-    if (
-      $validated['status'] === 'endorsed'
-      && $disclosure->attachments()->where('needs_revision', true)->exists()
-    ) {
-      throw ValidationException::withMessages([
-        'status' => 'This submission cannot be endorsed while any files still need revision.',
+    DB::transaction(function () use ($disclosure): void {
+      $lockedDisclosure = InnovationDisclosure::query()->lockForUpdate()->findOrFail($disclosure->id);
+      if (! $this->allSubmittedFilesApproved($lockedDisclosure)) {
+        throw ValidationException::withMessages([
+          'status' => 'Approve every current submitted file before approving this submission.',
+        ]);
+      }
+
+      $lockedDisclosure->update([
+        'status' => 'endorsed',
+        'endorsed_at' => $lockedDisclosure->endorsed_at ?? now(),
+        'review_notes' => null,
       ]);
-    }
-
-    $endorsedAt = $validated['status'] === 'endorsed'
-      ? ($disclosure->endorsed_at ?? now())
-      : null;
-
-    $disclosure->update([
-      'status' => $validated['status'],
-      'endorsed_at' => $endorsedAt,
-      'review_notes' => $validated['status'] === 'returned'
-        ? $validated['review_notes']
-        : null,
-    ]);
+    });
+    $disclosure->refresh();
 
     if ($request->expectsJson()) {
       return response()->json([
-        'message' => 'Disclosure review updated.',
+        'message' => 'The submitted IDF has been approved.',
         'disclosure' => [
           'id' => $disclosure->id,
           'status' => $disclosure->status,
@@ -238,13 +231,15 @@ class IpHeadDashboardController extends Controller
         ...$this->dashboardPageParameters($request),
       ])
       ->with('toast_type', 'success')
-      ->with('toast_message', 'Disclosure review updated.');
+      ->with('toast_message', 'Submitted IDF approved.');
   }
 
   public function updateAttachmentReview(Request $request, DisclosureAttachment $attachment): RedirectResponse|JsonResponse
   {
     $this->ensureIpHead($request);
+    abort_unless($attachment->innovationDisclosure()->value('status') !== 'endorsed', 409);
     abort_unless(! $attachment->needs_revision, 409);
+    abort_unless($attachment->review_status !== 'accepted', 409);
 
     $validated = $request->validate([
       'needs_revision' => ['required', 'accepted'],
@@ -259,8 +254,15 @@ class IpHeadDashboardController extends Controller
     ]);
 
     DB::transaction(function () use ($attachment, $validated): void {
+      $disclosure = InnovationDisclosure::query()->lockForUpdate()->findOrFail($attachment->innovation_disclosure_id);
+      abort_unless($disclosure->status !== 'endorsed', 409);
+      $attachment = $disclosure->attachments()->lockForUpdate()->findOrFail($attachment->id);
+      abort_unless(! $attachment->needs_revision, 409);
+      abort_unless($attachment->review_status !== 'accepted', 409);
+
       $attachment->update([
         'needs_revision' => true,
+        'review_status' => 'revision_requested',
         'revision_notes' => $validated['revision_notes'],
         'is_latest_submission' => false,
       ]);
@@ -273,6 +275,7 @@ class IpHeadDashboardController extends Controller
       ]);
     });
 
+    $attachment->refresh();
     $queue = $request->input('queue') === 'reviewed' ? 'reviewed' : 'for-review';
     $page = max(1, $request->integer('page', 1));
 
@@ -282,6 +285,7 @@ class IpHeadDashboardController extends Controller
         'attachment' => [
           'id' => $attachment->id,
           'needs_revision' => $attachment->needs_revision,
+          'review_status' => $attachment->review_status,
           'revision_notes' => $attachment->revision_notes,
           'is_latest_submission' => $attachment->is_latest_submission,
         ],
@@ -302,35 +306,144 @@ class IpHeadDashboardController extends Controller
     $this->ensureIpHead($request);
 
     $validated = $request->validate([
-      'attachments' => ['required', 'array', 'min:1'],
-      'attachments.*.needs_revision' => ['required', 'accepted'],
-      'attachments.*.revision_notes' => ['required', 'string', 'max:2000'],
+      'attachments' => ['sometimes', 'array', 'min:1'],
+      'attachments.*.status' => ['required', Rule::in(['review_needed', 'revision_requested', 'accepted'])],
+      'attachments.*.revision_notes' => ['nullable', 'string', 'max:2000'],
+      'technology_files' => ['sometimes', 'array', 'min:1'],
+      'technology_files.*.status' => ['required', Rule::in(['review_needed', 'revision_requested', 'accepted'])],
+      'technology_files.*.revision_notes' => ['nullable', 'string', 'max:2000'],
+      'technology_files.*.revision_guidance_pdf' => ['nullable', 'file', 'mimes:pdf', 'max:15360'],
     ]);
 
-    DB::transaction(function () use ($disclosure, $validated): void {
-      foreach ($validated['attachments'] as $attachmentId => $review) {
-        abort_unless(ctype_digit((string) $attachmentId), 422);
-        $attachment = $disclosure->attachments()->lockForUpdate()->findOrFail($attachmentId);
-        abort_unless(! $attachment->needs_revision, 409);
-
-        $attachment->update([
-          'needs_revision' => true,
-          'revision_notes' => $review['revision_notes'],
-          'is_latest_submission' => false,
-        ]);
-        $attachment->events()->create([
-          'event_type' => 'revision_requested',
-          'version' => $attachment->version,
-          'original_name' => $attachment->original_name,
-          'revision_notes' => $attachment->revision_notes,
-          'occurred_at' => $attachment->updated_at,
+    $attachmentReviews = $validated['attachments'] ?? [];
+    $technologyFileReviews = $validated['technology_files'] ?? [];
+    if ($attachmentReviews === [] && $technologyFileReviews === []) {
+      throw ValidationException::withMessages([
+        'technology_files' => 'Select a file status before saving the review.',
+      ]);
+    }
+    foreach ($technologyFileReviews as $review) {
+      if ($review['status'] === 'revision_requested' && blank($review['revision_notes'] ?? null)) {
+        throw ValidationException::withMessages([
+          'technology_files' => 'Add revision notes for each file marked as needing revision.',
         ]);
       }
-    });
+      if (
+        isset($review['revision_guidance_pdf'])
+        && $review['status'] !== 'revision_requested'
+      ) {
+        throw ValidationException::withMessages([
+          'technology_files' => 'A noted PDF can only be uploaded when requesting a revision.',
+        ]);
+      }
+      if (
+        ($review['revision_guidance_pdf'] ?? null) instanceof UploadedFile
+        && mb_strlen($review['revision_guidance_pdf']->getClientOriginalName()) > 255
+      ) {
+        throw ValidationException::withMessages([
+          'technology_files' => 'The noted PDF file name may not exceed 255 characters.',
+        ]);
+      }
+    }
+    foreach ($attachmentReviews as $review) {
+      if ($review['status'] === 'revision_requested' && blank($review['revision_notes'] ?? null)) {
+        throw ValidationException::withMessages([
+          'attachments' => 'Add revision notes for each file marked as needing revision.',
+        ]);
+      }
+    }
+
+    $newGuidancePaths = [];
+    $oldGuidancePaths = [];
+    try {
+      DB::transaction(function () use (
+        $disclosure,
+        $attachmentReviews,
+        $technologyFileReviews,
+        &$newGuidancePaths,
+        &$oldGuidancePaths
+      ): void {
+        $lockedDisclosure = InnovationDisclosure::query()->lockForUpdate()->findOrFail($disclosure->id);
+        abort_unless($lockedDisclosure->status !== 'endorsed', 409);
+
+        foreach ($attachmentReviews as $attachmentId => $review) {
+          abort_unless(ctype_digit((string) $attachmentId), 422);
+          $attachment = $disclosure->attachments()->lockForUpdate()->findOrFail($attachmentId);
+          abort_unless($attachment->is_latest_submission && ! $attachment->needs_revision, 409);
+          if ($attachment->review_status === 'accepted') {
+            abort_unless($review['status'] === 'accepted', 409);
+            continue;
+          }
+          $wasRevisionRequested = $review['status'] === 'revision_requested';
+          $attachment->update([
+            'review_status' => $review['status'],
+            'needs_revision' => $wasRevisionRequested,
+            'revision_notes' => $wasRevisionRequested ? $review['revision_notes'] : null,
+            'is_latest_submission' => ! $wasRevisionRequested,
+          ]);
+          if ($wasRevisionRequested) {
+            $attachment->events()->create([
+              'event_type' => 'revision_requested',
+              'version' => $attachment->version,
+              'original_name' => $attachment->original_name,
+              'revision_notes' => $attachment->revision_notes,
+              'occurred_at' => $attachment->updated_at,
+            ]);
+          }
+        }
+        foreach ($technologyFileReviews as $fileId => $review) {
+          abort_unless(ctype_digit((string) $fileId), 422);
+          $technology = $disclosure->technologies()
+            ->whereHas('files', fn ($query) => $query->whereKey($fileId))
+            ->firstOrFail();
+          $file = $technology->files()->lockForUpdate()->findOrFail($fileId);
+          if ($file->review_status === 'accepted') {
+            abort_unless($review['status'] === 'accepted', 409);
+            continue;
+          }
+          $isRevisionRequested = $review['status'] === 'revision_requested';
+          $guidancePdf = $review['revision_guidance_pdf'] ?? null;
+          $guidancePath = $isRevisionRequested ? $file->revision_guidance_path : null;
+          $guidanceName = $isRevisionRequested ? $file->revision_guidance_name : null;
+
+          if ($guidancePdf instanceof UploadedFile) {
+            $guidancePath = $guidancePdf->store(
+              "innovation-disclosures/{$lockedDisclosure->id}/technologies/{$technology->id}/revision-guidance",
+              'local'
+            );
+            if (! is_string($guidancePath)) {
+              throw new \RuntimeException('The noted PDF could not be stored.');
+            }
+            $newGuidancePaths[] = $guidancePath;
+            $guidanceName = $guidancePdf->getClientOriginalName();
+          }
+
+          if (
+            is_string($file->revision_guidance_path)
+            && $file->revision_guidance_path !== $guidancePath
+          ) {
+            $oldGuidancePaths[] = $file->revision_guidance_path;
+          }
+
+          $file->update([
+            'review_status' => $review['status'],
+            'revision_notes' => $isRevisionRequested
+              ? $review['revision_notes']
+              : null,
+            'revision_guidance_path' => $guidancePath,
+            'revision_guidance_name' => $guidanceName,
+          ]);
+        }
+      });
+    } catch (\Throwable $exception) {
+      Storage::disk('local')->delete($newGuidancePaths);
+      throw $exception;
+    }
+    Storage::disk('local')->delete($oldGuidancePaths);
 
     return response()->json([
       'message' => 'File reviews saved.',
-      'reviewed_count' => count($validated['attachments']),
+      'reviewed_count' => count($attachmentReviews) + count($technologyFileReviews),
     ]);
   }
 
@@ -361,6 +474,38 @@ class IpHeadDashboardController extends Controller
       ResponseHeaderBag::DISPOSITION_INLINE,
       $ownedAttachment->original_name
     );
+  }
+
+  private function allSubmittedFilesApproved(InnovationDisclosure $disclosure): bool
+  {
+    $disclosure->loadMissing(['attachments', 'technologies.files']);
+    $reviewableAttachments = $this->reviewableAttachments($disclosure);
+    $latestAttachments = $reviewableAttachments->where('is_latest_submission', true);
+    $hasTechnologyFiles = $disclosure->technologies->contains(fn ($technology) => $technology->files->isNotEmpty());
+    $hasFiles = $hasTechnologyFiles || $latestAttachments->isNotEmpty()
+      || $reviewableAttachments->contains(fn ($attachment) => $attachment->needs_revision);
+
+    if (! $hasFiles) {
+      return false;
+    }
+
+    return ! $reviewableAttachments->contains(fn ($attachment) => $attachment->needs_revision)
+      && ! $latestAttachments->contains(fn ($attachment) => $attachment->review_status !== 'accepted')
+      && ! $disclosure->technologies()
+        ->whereHas('files', fn ($query) => $query->where('review_status', '!=', 'accepted'))
+        ->exists();
+  }
+
+  private function reviewableAttachments(InnovationDisclosure $disclosure): Collection
+  {
+    $technologyFileNames = $disclosure->technologies
+      ->flatMap(fn ($technology) => $technology->files->pluck('original_name'))
+      ->map(fn ($fileName) => Str::lower(trim($fileName)))
+      ->flip();
+
+    return $disclosure->attachments
+      ->filter(fn ($attachment) => $attachment->is_latest_submission || $attachment->needs_revision)
+      ->reject(fn ($attachment) => $technologyFileNames->has(Str::lower(trim($attachment->original_name))));
   }
 
   private function ensureIpHead(Request $request): void
